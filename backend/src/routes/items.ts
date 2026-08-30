@@ -67,6 +67,13 @@ router.patch("/:id", async (req, res) => {
   if (existing === "forbidden") return res.status(403).json({ error: "Forbidden" });
 
   const { title, description, type, status, important, urgent, dueDate, assignedToId } = req.body ?? {};
+
+  // Track when an item enters/leaves the WAITING (delegated, awaiting reply) state.
+  let waitingSinceUpdate: { waitingSince: Date | null } | {} = {};
+  if (status !== undefined) {
+    waitingSinceUpdate = status === "WAITING" ? { waitingSince: new Date() } : { waitingSince: null };
+  }
+
   const item = await prisma.item.update({
     where: { id: req.params.id },
     data: {
@@ -78,6 +85,7 @@ router.patch("/:id", async (req, res) => {
       ...(urgent !== undefined ? { urgent } : {}),
       ...(dueDate !== undefined ? { dueDate: dueDate ? new Date(dueDate) : null } : {}),
       ...(assignedToId !== undefined ? { assignedToId } : {}),
+      ...waitingSinceUpdate,
     },
   });
 

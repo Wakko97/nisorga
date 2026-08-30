@@ -1,6 +1,7 @@
 export type Role = "OWNER" | "MEMBER";
 export type ItemType = "IDEA" | "TASK";
-export type ItemStatus = "INBOX" | "TODO" | "IN_PROGRESS" | "DONE";
+export type ItemStatus = "INBOX" | "TODO" | "IN_PROGRESS" | "WAITING" | "DONE";
+export type ItemSource = "MANUAL" | "EMAIL" | "VOICE";
 
 export interface User {
   id: string;
@@ -19,6 +20,8 @@ export interface Item {
   important: boolean;
   urgent: boolean;
   dueDate: string | null;
+  waitingSince: string | null;
+  source: ItemSource;
   createdById: string;
   createdBy?: User;
   assignedToId: string | null;
@@ -26,6 +29,12 @@ export interface Item {
   googleEventId: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface WeeklyReview {
+  openInboxItems: Item[];
+  overdueTasks: Item[];
+  staleIdeas: Item[];
 }
 
 export interface Comment {

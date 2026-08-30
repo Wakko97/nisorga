@@ -1,10 +1,31 @@
 import { Router } from "express";
+import crypto from "crypto";
 import { prisma } from "../lib/prisma";
 import { requireAuth } from "../middleware/auth";
 import { generateApiKey } from "../lib/apiKey";
 
 const router = Router();
 router.use(requireAuth);
+
+function inboundAddress(token: string) {
+  const domain = process.env.EMAIL_INBOUND_DOMAIN || "inbound.example.com";
+  return `inbox+${token}@${domain}`;
+}
+
+// Email inbound capture
+router.get("/email", async (req, res) => {
+  const user = await prisma.user.findUnique({ where: { id: req.user!.id } });
+  if (!user) return res.status(404).json({ error: "Not found" });
+  res.json({ address: inboundAddress(user.emailInboundToken) });
+});
+
+router.post("/email/regenerate", async (req, res) => {
+  const user = await prisma.user.update({
+    where: { id: req.user!.id },
+    data: { emailInboundToken: crypto.randomUUID() },
+  });
+  res.json({ address: inboundAddress(user.emailInboundToken) });
+});
 
 // API keys
 router.get("/api-keys", async (req, res) => {

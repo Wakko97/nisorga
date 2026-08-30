@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { api } from "../lib/api";
 import { Item } from "../lib/types";
+import { daysSince, isWaitingOverdue } from "../lib/waiting";
 
 const QUADRANTS: { key: string; important: boolean; urgent: boolean; label: string; color: string }[] = [
   { key: "do", important: true, urgent: true, label: "Wichtig & Dringend — Sofort erledigen", color: "bg-red-50 border-red-200" },
@@ -28,6 +29,11 @@ function DraggableCard({ item }: { item: Item }) {
       <Link to={`/items/${item.id}`} onClick={(e) => e.stopPropagation()} className="text-sm hover:underline">
         {item.title}
       </Link>
+      {isWaitingOverdue(item.status, item.waitingSince) && (
+        <span className="block mt-1 text-xs px-1.5 py-0.5 rounded bg-red-100 text-red-700 w-fit">
+          überfällig, wartet seit {daysSince(item.waitingSince!)} Tagen
+        </span>
+      )}
     </div>
   );
 }

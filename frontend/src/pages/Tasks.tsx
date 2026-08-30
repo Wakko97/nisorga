@@ -3,8 +3,18 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { api } from "../lib/api";
 import { Item, User, ItemStatus } from "../lib/types";
+import { daysSince, isWaitingOverdue } from "../lib/waiting";
 
-const STATUSES: ItemStatus[] = ["TODO", "IN_PROGRESS", "DONE"];
+const STATUSES: ItemStatus[] = ["TODO", "IN_PROGRESS", "WAITING", "DONE"];
+
+function WaitingBadge({ item }: { item: Item }) {
+  if (!isWaitingOverdue(item.status, item.waitingSince)) return null;
+  return (
+    <span className="ml-2 inline-block text-xs px-1.5 py-0.5 rounded bg-red-100 text-red-700">
+      überfällig, wartet seit {daysSince(item.waitingSince!)} Tagen
+    </span>
+  );
+}
 
 export default function Tasks() {
   const [status, setStatus] = useState<string>("");
@@ -69,7 +79,10 @@ export default function Tasks() {
                   {item.title}
                 </Link>
               </td>
-              <td className="p-2">{item.status}</td>
+              <td className="p-2">
+                {item.status}
+                <WaitingBadge item={item} />
+              </td>
               <td className="p-2">{item.assignedTo?.name ?? "—"}</td>
               <td className="p-2">{item.dueDate ? new Date(item.dueDate).toLocaleDateString() : "—"}</td>
             </tr>

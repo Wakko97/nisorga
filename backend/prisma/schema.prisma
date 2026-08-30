@@ -21,16 +21,24 @@ enum ItemStatus {
   INBOX
   TODO
   IN_PROGRESS
+  WAITING
   DONE
 }
 
+enum ItemSource {
+  MANUAL
+  EMAIL
+  VOICE
+}
+
 model User {
-  id           String   @id @default(uuid())
-  email        String   @unique
-  passwordHash String
-  name         String
-  role         Role     @default(MEMBER)
-  createdAt    DateTime @default(now())
+  id                 String   @id @default(uuid())
+  email              String   @unique
+  passwordHash       String
+  name               String
+  role               Role     @default(MEMBER)
+  emailInboundToken  String   @unique
+  createdAt          DateTime @default(now())
 
   createdItems    Item[]              @relation("CreatedItems")
   assignedItems   Item[]              @relation("AssignedItems")
@@ -49,6 +57,8 @@ model Item {
   important     Boolean    @default(false)
   urgent        Boolean    @default(false)
   dueDate       DateTime?
+  waitingSince  DateTime?
+  source        ItemSource @default(MANUAL)
   createdById   String
   createdBy     User       @relation("CreatedItems", fields: [createdById], references: [id])
   assignedToId  String?

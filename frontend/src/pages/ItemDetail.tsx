@@ -119,8 +119,14 @@ export default function ItemDetail() {
             <option value="INBOX">Inbox</option>
             <option value="TODO">To-do</option>
             <option value="IN_PROGRESS">In Arbeit</option>
+            <option value="WAITING">Wartet auf Rückmeldung</option>
             <option value="DONE">Erledigt</option>
           </select>
+          {item.status === "WAITING" && item.waitingSince && (
+            <p className="text-xs text-gray-500 mt-1">
+              Wartet seit {new Date(item.waitingSince).toLocaleDateString()}
+            </p>
+          )}
         </div>
         <div>
           <label className="block mb-1 text-gray-600">Zugewiesen an</label>

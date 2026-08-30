@@ -63,6 +63,18 @@ export default function Settings() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["webhooks"] }),
   });
 
+  const { data: emailSettings } = useQuery<{ address: string }>({
+    queryKey: ["settings-email"],
+    queryFn: () => api.get("/settings/email"),
+  });
+  const [copied, setCopied] = useState(false);
+  const regenerateEmail = useMutation({
+    mutationFn: () => api.post<{ address: string }>("/settings/email/regenerate"),
+    onSuccess: (data) => {
+      queryClient.setQueryData(["settings-email"], data);
+    },
+  });
+
   return (
     <div className="space-y-8 max-w-2xl">
       <h1 className="text-2xl font-semibold">Einstellungen</h1>
@@ -84,6 +96,40 @@ export default function Settings() {
         >
           {googleStatus?.connected ? "Neu verbinden" : "Google Kalender verbinden"}
         </button>
+      </section>
+
+      <section className="bg-white border rounded-lg p-4">
+        <h2 className="font-semibold mb-2">E-Mail-Erfassung</h2>
+        <p className="text-sm mb-3">
+          Sende eine E-Mail an diese Adresse, um sie automatisch als Idee in deiner Inbox zu erfassen:
+        </p>
+        <div className="flex gap-2 mb-2">
+          <code className="flex-1 border rounded px-3 py-1.5 text-sm bg-gray-50 overflow-x-auto">
+            {emailSettings?.address ?? "…"}
+          </code>
+          <button
+            onClick={() => {
+              if (emailSettings?.address) {
+                navigator.clipboard.writeText(emailSettings.address);
+                setCopied(true);
+                setTimeout(() => setCopied(false), 2000);
+              }
+            }}
+            className="text-sm px-3 py-1.5 rounded border border-gray-300 hover:bg-gray-100"
+          >
+            {copied ? "Kopiert!" : "Kopieren"}
+          </button>
+          <button
+            onClick={() => regenerateEmail.mutate()}
+            className="text-sm px-3 py-1.5 rounded border border-gray-300 hover:bg-gray-100"
+          >
+            Neu generieren
+          </button>
+        </div>
+        <p className="text-xs text-gray-500">
+          Zusätzlich erhältst du freitags einen wöchentlichen Rückblick per E-Mail mit offenen Inbox-Punkten,
+          überfälligen Aufgaben und unbearbeiteten Ideen.
+        </p>
       </section>
 
       <section className="bg-white border rounded-lg p-4">

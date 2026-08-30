@@ -5,6 +5,7 @@ const navItems = [
   { to: "/inbox", label: "Inbox" },
   { to: "/matrix", label: "Matrix" },
   { to: "/tasks", label: "Aufgaben" },
+  { to: "/review", label: "Wochenrückblick" },
   { to: "/settings", label: "Einstellungen" },
 ];
 

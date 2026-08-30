@@ -78,6 +78,23 @@ Monorepo mit npm workspaces:
 
 Siehe [docs/api.md](docs/api.md) für die vollständige Dokumentation der `/api/v1`-Schnittstelle (API-Key-Auth) sowie der Webhooks.
 
+## Erweiterte Features
+
+- **Wochenrückblick** (`/review`, Backend `GET /review/weekly`): zeigt offene Inbox-Punkte, überfällige Aufgaben und seit über 3 Tagen unbearbeitete Ideen, mit Inline-Aktionen (Priorität setzen, zu Aufgabe konvertieren, zuweisen, archivieren). Dieselbe Sichtbarkeitslogik wie bei `/items` (Owner sehen alles, Mitglieder nur eigene/zugewiesene Items).
+- **E-Mail-Erfassung**: Jeder Nutzer bekommt eine persönliche Inbound-Adresse (`inbox+<token>@<EMAIL_INBOUND_DOMAIN>`, sichtbar/kopierbar unter Einstellungen). Eingehende Mails werden über SendGrid Inbound Parse als Idee in der Inbox angelegt (`source=EMAIL`).
+- **Delegations-Tracking & Erinnerungen**: Items können auf Status „Wartet auf Rückmeldung" (`WAITING`) gesetzt werden; `waitingSince` wird automatisch gepflegt. Ein täglicher Cron-Job verschickt nach `WAITING_REMINDER_DAYS` (Default 3) eine Erinnerungsmail an Ersteller:in und Zugewiesene:n. Aufgaben-/Matrix-Ansicht zeigen ein rotes "überfällig, wartet seit X Tagen"-Badge.
+- **Wochenrückblick-Digest**: Ein wöchentlicher Cron-Job (freitags 08:00) verschickt die Wochenrückblick-Daten aller Nutzer:innen als HTML-Mail.
+- **Sprachnotiz**: Mikrofon-Button im Schnellerfassungsfeld nutzt die Web-Speech-API (`de-DE`), um gesprochenen Text direkt als Titel zu übernehmen. Wird ausgeblendet/deaktiviert, wenn der Browser die API nicht unterstützt.
+
+### SendGrid einrichten
+
+1. Im SendGrid-Konto eine **Inbound Parse**-Domain/-Subdomain einrichten (z. B. `inbound.deine-domain.tld`) und den MX-Eintrag entsprechend SendGrid-Anleitung setzen.
+2. Als Webhook-URL `https://<backend-host>/integrations/email/inbound?secret=<EMAIL_INBOUND_SECRET>` eintragen (POST, multipart/form-data — "Post the raw, full MIME message" kann deaktiviert bleiben, da nur `to`/`subject`/`text` ausgewertet werden).
+3. In `backend/.env` `SENDGRID_API_KEY`, `SENDGRID_FROM_EMAIL`, `EMAIL_INBOUND_SECRET` und `EMAIL_INBOUND_DOMAIN` (= die eingerichtete Inbound-Parse-Domain) setzen.
+4. Ohne gesetzten `SENDGRID_API_KEY` versendet `sendEmail()` keine echten Mails, sondern loggt nur eine Warnung — lokale Entwicklung funktioniert also auch ohne SendGrid-Account.
+
+> **Hinweis:** Die Cron-Jobs (Erinnerungen, Wochendigest) laufen im selben Node-Prozess wie der API-Server (`node-cron`, registriert in `backend/src/index.ts`, deaktiviert wenn `NODE_ENV=test`). Für den Produktivbetrieb bei höherer Last ist ein separater Worker-Prozess empfehlenswert, damit lang laufende Jobs den API-Server nicht beeinträchtigen.
+
 ## Build & Typecheck
 
 ```bash

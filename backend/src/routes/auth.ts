@@ -1,5 +1,6 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
+import crypto from "crypto";
 import { prisma } from "../lib/prisma";
 import { signToken, requireAuth } from "../middleware/auth";
 
@@ -26,7 +27,7 @@ router.post("/register", async (req, res) => {
 
   const passwordHash = await bcrypt.hash(password, 10);
   const user = await prisma.user.create({
-    data: { email, passwordHash, name, role },
+    data: { email, passwordHash, name, role, emailInboundToken: crypto.randomUUID() },
   });
 
   const token = signToken({ id: user.id, email: user.email, name: user.name, role: user.role });
