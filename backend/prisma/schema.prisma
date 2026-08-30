@@ -1,0 +1,103 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  OWNER
+  MEMBER
+}
+
+enum ItemType {
+  IDEA
+  TASK
+}
+
+enum ItemStatus {
+  INBOX
+  TODO
+  IN_PROGRESS
+  DONE
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  role         Role     @default(MEMBER)
+  createdAt    DateTime @default(now())
+
+  createdItems    Item[]              @relation("CreatedItems")
+  assignedItems   Item[]              @relation("AssignedItems")
+  comments        Comment[]
+  googleAccount   GoogleAccount?
+  apiKeys         ApiKey[]
+  webhooks        WebhookSubscription[]
+}
+
+model Item {
+  id            String     @id @default(uuid())
+  type          ItemType   @default(IDEA)
+  title         String
+  description   String?
+  status        ItemStatus @default(INBOX)
+  important     Boolean    @default(false)
+  urgent        Boolean    @default(false)
+  dueDate       DateTime?
+  createdById   String
+  createdBy     User       @relation("CreatedItems", fields: [createdById], references: [id])
+  assignedToId  String?
+  assignedTo    User?      @relation("AssignedItems", fields: [assignedToId], references: [id])
+  googleEventId String?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  comments Comment[]
+}
+
+model Comment {
+  id        String   @id @default(uuid())
+  itemId    String
+  item      Item     @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id])
+  body      String
+  createdAt DateTime @default(now())
+}
+
+// NOTE: accessToken/refreshToken are stored as plain strings for this MVP.
+// Make sure database access is restricted (network, credentials, backups)
+// since these tokens grant access to the user's Google Calendar.
+model GoogleAccount {
+  id           String   @id @default(uuid())
+  userId       String   @unique
+  user         User     @relation(fields: [userId], references: [id])
+  accessToken  String
+  refreshToken String
+  expiryDate   DateTime?
+  createdAt    DateTime @default(now())
+}
+
+model ApiKey {
+  id         String    @id @default(uuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id])
+  key        String    @unique
+  label      String
+  createdAt  DateTime  @default(now())
+  lastUsedAt DateTime?
+}
+
+model WebhookSubscription {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  url       String
+  events    String[]
+  createdAt DateTime @default(now())
+}
