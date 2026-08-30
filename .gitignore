@@ -6,3 +6,5 @@ build/
 *.log
 .DS_Store
 *.tsbuildinfo
+frontend/test-results/
+frontend/playwright-report/

@@ -31,16 +31,18 @@ export default function Login() {
       <form onSubmit={handleSubmit} className="w-full max-w-sm bg-white p-6 rounded-lg shadow border">
         <h1 className="text-xl font-semibold mb-4">Anmelden</h1>
         {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
-        <label className="block text-sm mb-1">E-Mail</label>
+        <label htmlFor="login-email" className="block text-sm mb-1">E-Mail</label>
         <input
+          id="login-email"
           type="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           required
           className="w-full border rounded px-3 py-2 mb-3"
         />
-        <label className="block text-sm mb-1">Passwort</label>
+        <label htmlFor="login-password" className="block text-sm mb-1">Passwort</label>
         <input
+          id="login-password"
           type="password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}

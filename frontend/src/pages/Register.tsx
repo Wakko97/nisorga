@@ -35,23 +35,26 @@ export default function Register() {
           Der erste registrierte Benutzer wird automatisch zum Owner.
         </p>
         {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
-        <label className="block text-sm mb-1">Name</label>
+        <label htmlFor="register-name" className="block text-sm mb-1">Name</label>
         <input
+          id="register-name"
           value={name}
           onChange={(e) => setName(e.target.value)}
           required
           className="w-full border rounded px-3 py-2 mb-3"
         />
-        <label className="block text-sm mb-1">E-Mail</label>
+        <label htmlFor="register-email" className="block text-sm mb-1">E-Mail</label>
         <input
+          id="register-email"
           type="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           required
           className="w-full border rounded px-3 py-2 mb-3"
         />
-        <label className="block text-sm mb-1">Passwort</label>
+        <label htmlFor="register-password" className="block text-sm mb-1">Passwort</label>
         <input
+          id="register-password"
           type="password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}

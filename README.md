@@ -44,9 +44,9 @@ Monorepo mit npm workspaces:
    cp frontend/.env.example frontend/.env
    ```
 
-   Backend `.env` ausfüllen: `DATABASE_URL`, `JWT_SECRET`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`, `PORT`, `FRONTEND_URL`.
+   Backend `.env` ausfüllen: `DATABASE_URL`, `JWT_SECRET`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`, `GOOGLE_TOKEN_ENCRYPTION_KEY`, `PORT`, `FRONTEND_URL`.
 
-   > **Hinweis:** `GoogleAccount.accessToken`/`refreshToken` werden für dieses MVP als Klartext-Strings in der Datenbank gespeichert (keine zusätzliche Verschlüsselung). Stellt sicher, dass die Datenbank (Zugriff, Netzwerk, Backups) entsprechend abgesichert ist, da diese Tokens Zugriff auf den Google-Kalender des jeweiligen Nutzers geben.
+   > **Hinweis:** `GoogleAccount.accessToken`/`refreshToken` werden verschlüsselt in der Datenbank gespeichert — siehe Abschnitt [Produktivhärtung](#produktivhärtung) für Details zu `GOOGLE_TOKEN_ENCRYPTION_KEY`.
 
 3. Datenbankschema anwenden:
 
@@ -126,11 +126,32 @@ DATABASE_URL="postgresql://<user>:<pass>@localhost:5432/nisorga_test?schema=publ
 # Backend-Tests ausführen
 DATABASE_URL="postgresql://<user>:<pass>@localhost:5432/nisorga_test?schema=public" NODE_ENV=test npm test
 
-# Frontend: Unit-Tests für reine Logik (z.B. Überfällig-Berechnung)
+# Frontend: Unit- und UI-Komponententests (Vitest + jsdom + React Testing Library)
 cd frontend && npm test
+```
+
+Die Frontend-Testsuite (`cd frontend && npm test`) deckt neben der reinen Logik (`src/lib/waiting.test.ts`) jetzt auch UI-Komponententests mit Vitest + jsdom + React Testing Library ab: `AuthContext`, `ProtectedRoute`, `QuickCapture`, `useSpeechRecognition`, `ItemDetail` und `Login`. Der API-Client (`src/lib/api.ts`) wird darin per `vi.mock` ersetzt — es finden keine echten Netzwerkaufrufe statt.
+
+## E2E-Tests
+
+End-to-End-Tests mit [Playwright](https://playwright.dev/) liegen in `frontend/e2e/` und decken die zentralen Nutzerflüsse ab: Registrierung/Login/Logout (`auth.spec.ts`), Schnellerfassung → Konvertierung zu Aufgabe → "Wartet auf Rückmeldung" (`quick-capture-to-task.spec.ts`) sowie den Wochenrückblick (`review.spec.ts`). Jeder Testlauf verwendet eine frisch generierte, eindeutige E-Mail-Adresse pro Test, daher ist kein globaler DB-Reset nötig.
+
+Setup:
+
+```bash
+cd frontend
+npx playwright install --with-deps chromium
+```
+
+Voraussetzung: `backend/.env` muss vollständig ausgefüllt sein (siehe `backend/.env.example`), insbesondere `JWT_SECRET`, `EMAIL_INBOUND_SECRET` und `GOOGLE_TOKEN_ENCRYPTION_KEY` — ohne diese startet das Backend nicht. Für die E2E-Tests genügt die normale (nicht die Test-)Datenbank aus dem Setup-Abschnitt oben, solange die Migrationen angewendet wurden (`npx prisma migrate deploy`).
+
+`frontend/playwright.config.ts` startet Backend (`npm run dev` in `../backend`, Port 4000) und Frontend (`npm run dev`, Port 5173) automatisch über die `webServer`-Option (Array mit zwei Einträgen), sofern sie nicht schon laufen (`reuseExistingServer: !process.env.CI`). Ein manueller Start in zwei Terminals ist daher nicht nötig, funktioniert aber genauso — Playwright erkennt bereits laufende Server auf den konfigurierten Ports und startet sie dann nicht erneut.
+
+```bash
+cd frontend
+npx playwright test
 ```
 
 ## Offene Punkte / TODO
 
-- Testabdeckung bisher auf Backend-Kernflows und die verwundbarsten Frontend-Funktionen fokussiert; UI-Komponententests (React Testing Library) und E2E-Tests (Playwright) fehlen noch.
 - E-Mail-Verifizierung ist derzeit ein Soft-Gate (kein Login-Block); je nach Compliance-Anforderung ggf. auf Hard-Gate umstellen.

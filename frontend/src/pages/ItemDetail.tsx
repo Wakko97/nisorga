@@ -110,8 +110,9 @@ export default function ItemDetail() {
           </div>
         </div>
         <div>
-          <label className="block mb-1 text-gray-600">Status</label>
+          <label htmlFor="item-status" className="block mb-1 text-gray-600">Status</label>
           <select
+            id="item-status"
             value={item.status}
             onChange={(e) => updateItem.mutate({ status: e.target.value as Item["status"] })}
             className="border rounded px-2 py-1 w-full"
