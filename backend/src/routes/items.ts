@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { prisma } from "../lib/prisma";
+import { prisma, publicUserSelect } from "../lib/prisma";
 import { requireAuth } from "../middleware/auth";
 import { fireWebhooks } from "../lib/webhooks";
 
@@ -23,7 +23,7 @@ router.get("/", async (req, res) => {
       ...(type ? { type: String(type) as any } : {}),
       ...(status ? { status: String(status) as any } : {}),
     },
-    include: { createdBy: true, assignedTo: true },
+    include: { createdBy: { select: publicUserSelect }, assignedTo: { select: publicUserSelect } },
     orderBy: { createdAt: "desc" },
   });
   res.json(items);
@@ -128,7 +128,7 @@ router.get("/:id/comments", async (req, res) => {
 
   const comments = await prisma.comment.findMany({
     where: { itemId: req.params.id },
-    include: { author: true },
+    include: { author: { select: publicUserSelect } },
     orderBy: { createdAt: "asc" },
   });
   res.json(comments);
@@ -145,7 +145,7 @@ router.post("/:id/comments", async (req, res) => {
 
   const comment = await prisma.comment.create({
     data: { itemId: req.params.id, authorId: user.id, body },
-    include: { author: true },
+    include: { author: { select: publicUserSelect } },
   });
   res.status(201).json(comment);
 });

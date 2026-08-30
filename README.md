@@ -105,7 +105,24 @@ cd backend && npx tsc --noEmit
 cd frontend && npm run build
 ```
 
+## Tests
+
+Backend-Tests (vitest + supertest) laufen gegen eine echte, separate Postgres-Testdatenbank (kein Mocking der DB) und decken Auth, Items-CRUD/Berechtigungen, Idee→Aufgabe-Konvertierung, Weekly Review, E-Mail-Inbound und die Cron-Job-Kernfunktionen ab — inklusive Regressionstests dafür, dass `passwordHash`/`emailInboundToken` nie in API-Antworten landen.
+
+```bash
+# Backend: einmalig eine Testdatenbank anlegen und Migrationen darauf anwenden
+createdb nisorga_test
+cd backend
+DATABASE_URL="postgresql://<user>:<pass>@localhost:5432/nisorga_test?schema=public" npx prisma migrate deploy
+
+# Backend-Tests ausführen
+DATABASE_URL="postgresql://<user>:<pass>@localhost:5432/nisorga_test?schema=public" NODE_ENV=test npm test
+
+# Frontend: Unit-Tests für reine Logik (z.B. Überfällig-Berechnung)
+cd frontend && npm test
+```
+
 ## Offene Punkte / TODO
 
-- Es wurde keine echte PostgreSQL-Instanz für diese Umgebung bereitgestellt; `prisma migrate dev` wurde daher nicht gegen eine laufende Datenbank ausgeführt. Das Schema ist mit `npx prisma validate` geprüft.
 - Für Produktivbetrieb: Verschlüsselung der Google-Tokens in der DB, Rate-Limiting für `/api/v1`, Refresh-Token-Rotation, E-Mail-Verifizierung bei der Registrierung.
+- Testabdeckung bisher auf Backend-Kernflows und die verwundbarsten Frontend-Funktionen fokussiert; UI-Komponententests (React Testing Library) und E2E-Tests (Playwright) fehlen noch.

@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { prisma } from "../lib/prisma";
+import { prisma, publicUserSelect } from "../lib/prisma";
 import { requireAuth } from "../middleware/auth";
 import { AuthUser } from "../middleware/auth";
 
@@ -27,17 +27,17 @@ export async function getWeeklyReviewData(user: AuthUser) {
   const [openInboxItems, overdueTasks, staleIdeas] = await Promise.all([
     prisma.item.findMany({
       where: { ...where, status: "INBOX" },
-      include: { createdBy: true, assignedTo: true },
+      include: { createdBy: { select: publicUserSelect }, assignedTo: { select: publicUserSelect } },
       orderBy: { createdAt: "desc" },
     }),
     prisma.item.findMany({
       where: { ...where, type: "TASK", status: { not: "DONE" }, dueDate: { lt: now } },
-      include: { createdBy: true, assignedTo: true },
+      include: { createdBy: { select: publicUserSelect }, assignedTo: { select: publicUserSelect } },
       orderBy: { dueDate: "asc" },
     }),
     prisma.item.findMany({
       where: { ...where, type: "IDEA", status: "INBOX", createdAt: { lt: ideaCutoff } },
-      include: { createdBy: true, assignedTo: true },
+      include: { createdBy: { select: publicUserSelect }, assignedTo: { select: publicUserSelect } },
       orderBy: { createdAt: "asc" },
     }),
   ]);

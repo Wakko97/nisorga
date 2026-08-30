@@ -1,4 +1,4 @@
-import { prisma } from "../lib/prisma";
+import { prisma, publicUserSelect } from "../lib/prisma";
 import { sendEmail } from "../lib/sendgrid";
 
 const WAITING_REMINDER_DAYS = Number(process.env.WAITING_REMINDER_DAYS || 3);
@@ -16,7 +16,7 @@ export async function runReminderCheck() {
 
   const items = await prisma.item.findMany({
     where: { status: "WAITING", waitingSince: { lt: cutoff } },
-    include: { createdBy: true, assignedTo: true },
+    include: { createdBy: { select: publicUserSelect }, assignedTo: { select: publicUserSelect } },
   });
 
   for (const item of items) {
