@@ -95,6 +95,14 @@ Siehe [docs/api.md](docs/api.md) für die vollständige Dokumentation der `/api/
 
 > **Hinweis:** Die Cron-Jobs (Erinnerungen, Wochendigest) laufen im selben Node-Prozess wie der API-Server (`node-cron`, registriert in `backend/src/index.ts`, deaktiviert wenn `NODE_ENV=test`). Für den Produktivbetrieb bei höherer Last ist ein separater Worker-Prozess empfehlenswert, damit lang laufende Jobs den API-Server nicht beeinträchtigen.
 
+## Produktivhärtung
+
+- **Verschlüsselte Google-Tokens**: `accessToken`/`refreshToken` in `GoogleAccount` werden AES-256-GCM-verschlüsselt gespeichert (`backend/src/lib/crypto.ts`). Erforderlich: `GOOGLE_TOKEN_ENCRYPTION_KEY` in `.env` (32 Byte, hex-kodiert — generieren mit `openssl rand -hex 32`). Ohne diesen Key schlägt jede Google-Verbindung/-Nutzung fehl statt Klartext-Tokens zu speichern.
+- **Rate-Limiting für `/api/v1`**: 300 Requests / 15 Minuten pro API-Key (Fallback: IP), via `express-rate-limit` (`backend/src/routes/apiV1.ts`). Antworten enthalten die Standard-`RateLimit-*`-Header.
+- **Brute-Force-Schutz für `/auth/login`**: 10 Versuche / 15 Minuten pro IP+E-Mail-Kombination (`backend/src/routes/auth.ts`).
+- **Refresh-Token-Rotation**: Login/Registrierung setzen zwei Cookies — ein kurzlebiges Access-Token (`token`, 15 Min., JWT) und ein Refresh-Token (`refreshToken`, 30 Tage, zufälliger Wert, nur gehasht in der DB gespeichert, Cookie-Pfad `/auth`). `POST /auth/refresh` rotiert das Refresh-Token bei jeder Nutzung (Single-Use); wird ein bereits verwendetes/rotiertes Token erneut vorgelegt, gilt das als Diebstahlsignal und alle Refresh-Tokens der/des Nutzer:in werden widerrufen. Der Frontend-API-Client (`frontend/src/lib/api.ts`) ruft `/auth/refresh` transparent bei einem 401 auf und wiederholt den ursprünglichen Request einmal.
+- **E-Mail-Verifizierung**: Bei der Registrierung wird automatisch eine Bestätigungsmail mit Link zu `/verify-email?token=...` verschickt (`POST /auth/verify-email`). Unbestätigte Accounts können sich weiterhin einloggen und die App nutzen (kein Hard-Block, um die Ersteinrichtung nicht zu blockieren), sehen aber im UI einen Hinweisbanner mit "Erneut senden"-Option (`POST /auth/resend-verification`).
+
 ## Build & Typecheck
 
 ```bash
@@ -124,5 +132,5 @@ cd frontend && npm test
 
 ## Offene Punkte / TODO
 
-- Für Produktivbetrieb: Verschlüsselung der Google-Tokens in der DB, Rate-Limiting für `/api/v1`, Refresh-Token-Rotation, E-Mail-Verifizierung bei der Registrierung.
 - Testabdeckung bisher auf Backend-Kernflows und die verwundbarsten Frontend-Funktionen fokussiert; UI-Komponententests (React Testing Library) und E2E-Tests (Playwright) fehlen noch.
+- E-Mail-Verifizierung ist derzeit ein Soft-Gate (kein Login-Block); je nach Compliance-Anforderung ggf. auf Hard-Gate umstellen.

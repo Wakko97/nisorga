@@ -1,5 +1,7 @@
+import { useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 import { useAuth, useLogout } from "../context/AuthContext";
+import { api } from "../lib/api";
 
 const navItems = [
   { to: "/inbox", label: "Inbox" },
@@ -12,9 +14,25 @@ const navItems = [
 export default function Layout() {
   const { user } = useAuth();
   const logout = useLogout();
+  const [resent, setResent] = useState(false);
 
   return (
     <div className="min-h-screen flex flex-col">
+      {user && user.emailVerified === false && (
+        <div className="bg-amber-50 border-b border-amber-200 text-amber-900 text-sm px-4 py-2 flex items-center justify-between">
+          <span>Bitte bestätige deine E-Mail-Adresse, um alle Funktionen (z.B. Erinnerungsmails) zu nutzen.</span>
+          {resent ? (
+            <span className="text-amber-700">Mail erneut gesendet.</span>
+          ) : (
+            <button
+              onClick={() => api.post("/auth/resend-verification").then(() => setResent(true))}
+              className="underline hover:no-underline"
+            >
+              Erneut senden
+            </button>
+          )}
+        </div>
+      )}
       <header className="border-b bg-white">
         <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-6">

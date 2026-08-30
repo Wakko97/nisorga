@@ -8,7 +8,27 @@ export class ApiError extends Error {
   }
 }
 
-export async function apiFetch<T = unknown>(path: string, options: RequestInit = {}): Promise<T> {
+// The access-token cookie is short-lived (15 min). When a request comes
+// back 401 we transparently rotate it via the refresh-token cookie and
+// retry once, so the user never notices the access token expired. Multiple
+// requests failing at once share a single in-flight refresh call.
+let refreshPromise: Promise<boolean> | null = null;
+
+async function refreshAccessToken(): Promise<boolean> {
+  if (!refreshPromise) {
+    refreshPromise = fetch(`${API_URL}/auth/refresh`, { method: "POST", credentials: "include" })
+      .then((res) => res.ok)
+      .catch(() => false)
+      .finally(() => {
+        refreshPromise = null;
+      });
+  }
+  return refreshPromise;
+}
+
+const NO_REFRESH_RETRY_PATHS = ["/auth/refresh", "/auth/login", "/auth/register"];
+
+export async function apiFetch<T = unknown>(path: string, options: RequestInit = {}, _retried = false): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
     credentials: "include",
     headers: {
@@ -17,6 +37,11 @@ export async function apiFetch<T = unknown>(path: string, options: RequestInit =
     },
     ...options,
   });
+
+  if (res.status === 401 && !_retried && !NO_REFRESH_RETRY_PATHS.includes(path)) {
+    const refreshed = await refreshAccessToken();
+    if (refreshed) return apiFetch<T>(path, options, true);
+  }
 
   if (!res.ok) {
     let message = res.statusText;

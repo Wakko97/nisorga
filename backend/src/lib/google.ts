@@ -1,5 +1,6 @@
 import { google } from "googleapis";
 import { prisma } from "./prisma";
+import { encrypt, decrypt } from "./crypto";
 
 export const GOOGLE_SCOPES = ["https://www.googleapis.com/auth/calendar.events"];
 
@@ -21,8 +22,8 @@ export async function getAuthorizedClientForUser(userId: string) {
 
   const client = createOAuthClient();
   client.setCredentials({
-    access_token: account.accessToken,
-    refresh_token: account.refreshToken,
+    access_token: decrypt(account.accessToken),
+    refresh_token: decrypt(account.refreshToken),
     expiry_date: account.expiryDate ? account.expiryDate.getTime() : undefined,
   });
 
@@ -33,7 +34,7 @@ export async function getAuthorizedClientForUser(userId: string) {
     await prisma.googleAccount.update({
       where: { userId },
       data: {
-        accessToken: credentials.access_token ?? account.accessToken,
+        accessToken: credentials.access_token ? encrypt(credentials.access_token) : account.accessToken,
         expiryDate: credentials.expiry_date ? new Date(credentials.expiry_date) : null,
       },
     });

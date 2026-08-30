@@ -32,13 +32,16 @@ enum ItemSource {
 }
 
 model User {
-  id                 String   @id @default(uuid())
-  email              String   @unique
-  passwordHash       String
-  name               String
-  role               Role     @default(MEMBER)
-  emailInboundToken  String   @unique
-  createdAt          DateTime @default(now())
+  id                    String    @id @default(uuid())
+  email                 String    @unique
+  passwordHash          String
+  name                  String
+  role                  Role      @default(MEMBER)
+  emailInboundToken     String    @unique
+  emailVerified         Boolean   @default(false)
+  emailVerifyToken      String?   @unique
+  emailVerifyExpiresAt  DateTime?
+  createdAt             DateTime  @default(now())
 
   createdItems    Item[]              @relation("CreatedItems")
   assignedItems   Item[]              @relation("AssignedItems")
@@ -46,6 +49,20 @@ model User {
   googleAccount   GoogleAccount?
   apiKeys         ApiKey[]
   webhooks        WebhookSubscription[]
+  refreshTokens   RefreshToken[]
+}
+
+// Refresh tokens are stored hashed (never plaintext) and rotated on every
+// use (the token used to refresh is revoked and a new one issued), so a
+// stolen refresh token is only valid for a single use before detection.
+model RefreshToken {
+  id         String    @id @default(uuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash  String    @unique
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
 }
 
 model Item {
@@ -80,9 +97,9 @@ model Comment {
   createdAt DateTime @default(now())
 }
 
-// NOTE: accessToken/refreshToken are stored as plain strings for this MVP.
-// Make sure database access is restricted (network, credentials, backups)
-// since these tokens grant access to the user's Google Calendar.
+// accessToken/refreshToken are stored AES-256-GCM encrypted (see
+// backend/src/lib/crypto.ts) using GOOGLE_TOKEN_ENCRYPTION_KEY; the DB
+// columns hold ciphertext, never plaintext tokens.
 model GoogleAccount {
   id           String   @id @default(uuid())
   userId       String   @unique

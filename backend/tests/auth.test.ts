@@ -40,4 +40,19 @@ describe("auth", () => {
       .send({ email: "wrongpw@test.com", password: "not-the-password" });
     expect(res.status).toBe(401);
   });
+
+  it("rate-limits repeated failed logins for the same email", async () => {
+    await request(app)
+      .post("/auth/register")
+      .send({ email: "bruteforce@test.com", password: "password123", name: "User" });
+
+    let lastStatus = 0;
+    for (let i = 0; i < 11; i++) {
+      const res = await request(app)
+        .post("/auth/login")
+        .send({ email: "bruteforce@test.com", password: "wrong-password" });
+      lastStatus = res.status;
+    }
+    expect(lastStatus).toBe(429);
+  });
 });

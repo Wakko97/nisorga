@@ -2,6 +2,7 @@ import { Router } from "express";
 import { prisma } from "../lib/prisma";
 import { requireAuth } from "../middleware/auth";
 import { createOAuthClient, getAuthorizedClientForUser, GOOGLE_SCOPES } from "../lib/google";
+import { encrypt } from "../lib/crypto";
 import { google } from "googleapis";
 
 const router = Router();
@@ -29,17 +30,21 @@ router.get("/callback", async (req, res) => {
     const client = createOAuthClient();
     const { tokens } = await client.getToken(String(code));
 
+    // Google only returns a refresh_token on the first consent; on
+    // reconnection we must keep the previously stored (encrypted) one.
+    const existing = await prisma.googleAccount.findUnique({ where: { userId: String(state) } });
+
     await prisma.googleAccount.upsert({
       where: { userId: String(state) },
       create: {
         userId: String(state),
-        accessToken: tokens.access_token ?? "",
-        refreshToken: tokens.refresh_token ?? "",
+        accessToken: encrypt(tokens.access_token ?? ""),
+        refreshToken: encrypt(tokens.refresh_token ?? ""),
         expiryDate: tokens.expiry_date ? new Date(tokens.expiry_date) : null,
       },
       update: {
-        accessToken: tokens.access_token ?? undefined,
-        refreshToken: tokens.refresh_token ?? undefined,
+        accessToken: tokens.access_token ? encrypt(tokens.access_token) : undefined,
+        refreshToken: tokens.refresh_token ? encrypt(tokens.refresh_token) : existing?.refreshToken,
         expiryDate: tokens.expiry_date ? new Date(tokens.expiry_date) : null,
       },
     });

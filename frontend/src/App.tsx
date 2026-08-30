@@ -7,6 +7,7 @@ import Tasks from "./pages/Tasks";
 import ItemDetail from "./pages/ItemDetail";
 import Review from "./pages/Review";
 import Settings from "./pages/Settings";
+import VerifyEmail from "./pages/VerifyEmail";
 import Layout from "./components/Layout";
 import ProtectedRoute from "./components/ProtectedRoute";
 
@@ -15,6 +16,7 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
+      <Route path="/verify-email" element={<VerifyEmail />} />
 
       <Route element={<ProtectedRoute />}>
         <Route element={<Layout />}>

@@ -1,9 +1,27 @@
 import { Router } from "express";
+import rateLimit from "express-rate-limit";
 import { prisma } from "../lib/prisma";
 import { requireApiKey } from "../middleware/apiKeyAuth";
 import { fireWebhooks } from "../lib/webhooks";
 
 const router = Router();
+
+// Keyed by the caller's API key (falling back to IP for unauthenticated/
+// malformed requests) so one integration can't exhaust another's quota.
+const apiV1RateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    const header = req.headers.authorization;
+    if (header?.startsWith("Bearer ")) return `key:${header.slice("Bearer ".length).trim()}`;
+    return req.ip ?? "unknown";
+  },
+  message: { error: "Too many requests, please slow down." },
+});
+
+router.use(apiV1RateLimit);
 router.use(requireApiKey);
 
 router.get("/items", async (req, res) => {
