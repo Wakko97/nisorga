@@ -1,0 +1,92 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - internal
+    # Standardmäßig kein Host-Port-Publish. Zum direkten Debuggen mit einem
+    # externen Client (z.B. psql) folgende Zeile einkommentieren:
+    # ports:
+    #   - "5432:5432"
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - backend/.env
+    # WICHTIG: backend/.env.example nutzt DATABASE_URL mit Host "localhost".
+    # Für docker-compose MUSS der Host in backend/.env auf den Servicenamen
+    # "postgres" geändert werden, z.B.:
+    #   DATABASE_URL="postgresql://<user>:<pass>@postgres:5432/<db>?schema=public"
+    volumes:
+      # Persistiert hochgeladene Item-Anhänge (z.B. Kamera-Scan-Fotos) über
+      # Container-Neustarts hinweg. Muss zu UPLOADS_DIR in backend/.env passen
+      # (Default dort: "./uploads", relativ zu /app im Container).
+      - uploads_data:/app/uploads
+    networks:
+      - internal
+    # Kein Host-Port-Publish standardmäßig: das Backend ist nur intern im
+    # Compose-Netzwerk erreichbar, der nginx im frontend-Container übernimmt
+    # das API-Proxying nach außen. Für direkten Zugriff zum Debuggen
+    # folgende Zeile einkommentieren:
+    # ports:
+    #   - "4000:4000"
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        # Relativer Pfad -> nginx im Container proxy'd /api/ intern zu backend:4000
+        VITE_API_URL: /api
+    restart: unless-stopped
+    depends_on:
+      - backend
+    networks:
+      - internal
+    # --- Variante (a): direkter Host-Zugriff / lokales Testen ---
+    # ports:
+    #   - "8080:80"
+    #
+    # --- Variante (b): Anbindung an einen extern laufenden Nginx Proxy
+    # Manager (häufigster Fall, wenn NPM ebenfalls per Docker läuft) ---
+    # 1. Unten im "networks:"-Block das externe Netzwerk ergänzen:
+    #      npm_network:
+    #        external: true
+    #        name: <name-des-npm-docker-netzwerks>   # z.B. "npm_default"
+    # 2. Diesen Service zusätzlich in das externe Netzwerk hängen:
+    #      networks:
+    #        - internal
+    #        - npm_network
+    # 3. In NPM als "Forward Hostname / IP" den Namen dieses Containers
+    #    (Compose-Projektname_frontend_1 bzw. Service-Alias "frontend",
+    #    je nach NPM-Netzwerk-Setup) und "Forward Port" 80 eintragen.
+    # Siehe docs/deployment.md für die vollständige Anleitung.
+
+networks:
+  internal:
+    driver: bridge
+  # externes NPM-Netzwerk (auskommentiert, siehe Hinweis oben bei "frontend"):
+  # npm_network:
+  #   external: true
+  #   name: <name-des-npm-docker-netzwerks>
+
+volumes:
+  postgres_data:
+  uploads_data:

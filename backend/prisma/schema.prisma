@@ -1,0 +1,145 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  OWNER
+  MEMBER
+}
+
+enum ItemType {
+  IDEA
+  TASK
+}
+
+enum ItemStatus {
+  INBOX
+  TODO
+  IN_PROGRESS
+  WAITING
+  DONE
+}
+
+enum ItemSource {
+  MANUAL
+  EMAIL
+  VOICE
+  SCAN
+}
+
+// Singleton row (id is always 1) tracking whether the setup wizard has run.
+// Self-registration (POST /auth/register) is locked until this is true;
+// POST /setup/init flips it atomically, which also structurally eliminates
+// the old "first registered user becomes OWNER" race condition.
+model AppState {
+  id          Int     @id @default(1)
+  initialized Boolean @default(false)
+}
+
+model User {
+  id                    String    @id @default(uuid())
+  email                 String    @unique
+  passwordHash          String
+  name                  String
+  role                  Role      @default(MEMBER)
+  emailInboundToken     String    @unique
+  emailVerified         Boolean   @default(false)
+  emailVerifyToken      String?   @unique
+  emailVerifyExpiresAt  DateTime?
+  createdAt             DateTime  @default(now())
+
+  createdItems    Item[]              @relation("CreatedItems")
+  assignedItems   Item[]              @relation("AssignedItems")
+  comments        Comment[]
+  googleAccount   GoogleAccount?
+  apiKeys         ApiKey[]
+  webhooks        WebhookSubscription[]
+  refreshTokens   RefreshToken[]
+}
+
+// Refresh tokens are stored hashed (never plaintext) and rotated on every
+// use (the token used to refresh is revoked and a new one issued), so a
+// stolen refresh token is only valid for a single use before detection.
+model RefreshToken {
+  id         String    @id @default(uuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash  String    @unique
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+}
+
+model Item {
+  id            String     @id @default(uuid())
+  type          ItemType   @default(IDEA)
+  title         String
+  description   String?
+  status        ItemStatus @default(INBOX)
+  important     Boolean    @default(false)
+  urgent        Boolean    @default(false)
+  dueDate       DateTime?
+  waitingSince  DateTime?
+  source        ItemSource @default(MANUAL)
+  createdById   String
+  createdBy     User       @relation("CreatedItems", fields: [createdById], references: [id])
+  assignedToId  String?
+  assignedTo    User?      @relation("AssignedItems", fields: [assignedToId], references: [id])
+  googleEventId String?
+  // Relative path (within UPLOADS_DIR) to a scanned/attached photo for this
+  // item, e.g. "3fa2c1e4-....jpg". Never a full URL or client-controlled
+  // filename — see lib/uploads.ts. Served only via the authenticated
+  // GET /items/:id/attachment route, never a static mount.
+  attachmentPath String?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  comments Comment[]
+}
+
+model Comment {
+  id        String   @id @default(uuid())
+  itemId    String
+  item      Item     @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id])
+  body      String
+  createdAt DateTime @default(now())
+}
+
+// accessToken/refreshToken are stored AES-256-GCM encrypted (see
+// backend/src/lib/crypto.ts) using GOOGLE_TOKEN_ENCRYPTION_KEY; the DB
+// columns hold ciphertext, never plaintext tokens.
+model GoogleAccount {
+  id           String   @id @default(uuid())
+  userId       String   @unique
+  user         User     @relation(fields: [userId], references: [id])
+  accessToken  String
+  refreshToken String
+  expiryDate   DateTime?
+  createdAt    DateTime @default(now())
+}
+
+model ApiKey {
+  id         String    @id @default(uuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id])
+  key        String    @unique
+  label      String
+  createdAt  DateTime  @default(now())
+  lastUsedAt DateTime?
+}
+
+model WebhookSubscription {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  url       String
+  events    String[]
+  createdAt DateTime @default(now())
+}
