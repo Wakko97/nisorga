@@ -245,3 +245,60 @@ describe("bulk item operations", () => {
     );
   });
 });
+
+describe("search (GET /items?q=...)", () => {
+  let ownerCookie: string[];
+
+  beforeEach(async () => {
+    ownerCookie = await registerAndLogin("owner@test.com", "Owner");
+    await request(app)
+      .post("/items")
+      .set("Cookie", ownerCookie)
+      .send({ title: "Steuererklärung einreichen", description: "Fristende 31.07." });
+    await request(app)
+      .post("/items")
+      .set("Cookie", ownerCookie)
+      .send({ title: "Milch kaufen", description: "für den Steuerberater-Termin vorbereiten" });
+    await request(app).post("/items").set("Cookie", ownerCookie).send({ title: "Team-Meeting vorbereiten" });
+  });
+
+  it("matches items by title, case-insensitively", async () => {
+    const res = await request(app).get("/items?q=steuer").set("Cookie", ownerCookie);
+    expect(res.status).toBe(200);
+    expect(res.body.map((i: { title: string }) => i.title).sort()).toEqual([
+      "Milch kaufen",
+      "Steuererklärung einreichen",
+    ]);
+  });
+
+  it("also matches items by description", async () => {
+    const res = await request(app).get("/items?q=Fristende").set("Cookie", ownerCookie);
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveLength(1);
+    expect(res.body[0].title).toBe("Steuererklärung einreichen");
+  });
+
+  it("returns everything visible when q is empty or omitted", async () => {
+    const res = await request(app).get("/items?q=").set("Cookie", ownerCookie);
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveLength(3);
+  });
+
+  it("returns an empty list for a query matching nothing", async () => {
+    const res = await request(app).get("/items?q=xyz-does-not-exist").set("Cookie", ownerCookie);
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual([]);
+  });
+
+  it("combines with the type/status filters", async () => {
+    await request(app)
+      .post("/items")
+      .set("Cookie", ownerCookie)
+      .send({ title: "Steuerbescheid prüfen", type: "TASK", status: "TODO" });
+
+    const res = await request(app).get("/items?q=steuer&type=TASK").set("Cookie", ownerCookie);
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveLength(1);
+    expect(res.body[0].title).toBe("Steuerbescheid prüfen");
+  });
+});

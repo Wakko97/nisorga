@@ -12,7 +12,7 @@ const VALID_STATUSES = ["INBOX", "TODO", "IN_PROGRESS", "WAITING", "DONE"];
 
 router.get("/", async (req, res) => {
   const user = req.user!;
-  const { type, status } = req.query;
+  const { type, status, q } = req.query;
 
   if (type !== undefined && !VALID_TYPES.includes(String(type))) {
     return res.status(400).json({ error: "Invalid type" });
@@ -21,11 +21,24 @@ router.get("/", async (req, res) => {
     return res.status(400).json({ error: "Invalid status" });
   }
 
+  // Case-insensitive substring match on title/description - not a "real"
+  // Postgres full-text (tsvector) search, but requires no extra index or
+  // migration and is plenty for the item volumes this app is built for.
+  const search = q !== undefined ? String(q).trim() : "";
+
   const items = await prisma.item.findMany({
     where: {
       ...visibilityWhere(user),
       ...(type ? { type: String(type) as any } : {}),
       ...(status ? { status: String(status) as any } : {}),
+      ...(search
+        ? {
+            OR: [
+              { title: { contains: search, mode: "insensitive" } },
+              { description: { contains: search, mode: "insensitive" } },
+            ],
+          }
+        : {}),
     },
     include: { createdBy: { select: publicUserSelect }, assignedTo: { select: publicUserSelect } },
     orderBy: { createdAt: "desc" },

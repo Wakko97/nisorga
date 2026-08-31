@@ -62,6 +62,15 @@ export default function Layout() {
             </nav>
           </div>
           <div className="flex items-center gap-3 text-sm text-gray-600 shrink-0">
+            <NavLink
+              to="/search"
+              aria-label="Suche"
+              className="flex items-center justify-center w-11 h-11 rounded hover:bg-gray-100"
+            >
+              <span aria-hidden="true" className="text-lg leading-none">
+                🔍
+              </span>
+            </NavLink>
             <span className="hidden sm:inline">
               {user?.name} ({user?.role === "OWNER" ? "Owner" : "Mitglied"})
             </span>
