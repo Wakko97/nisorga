@@ -9,6 +9,7 @@ Monorepo mit npm workspaces:
 ```
 /backend   Node.js + Express + TypeScript + Prisma + PostgreSQL
 /frontend  React + Vite + TypeScript + Tailwind CSS + React Router + TanStack Query
+/scripts   Betriebs-/Deployment-Skripte für Proxmox VE (siehe unten)
 ```
 
 ## Features
@@ -172,3 +173,33 @@ npx playwright test
 ## Offene Punkte / TODO
 
 - E-Mail-Verifizierung ist derzeit ein Soft-Gate (kein Login-Block); je nach Compliance-Anforderung ggf. auf Hard-Gate umstellen.
+
+## Proxmox VE Deployment
+
+Für den Betrieb auf einem eigenen Proxmox-VE-Host liegen unter [`scripts/`](scripts/) zwei unabhängige, in der **Proxmox-Shell** ausführbare Skripte:
+
+### 1. Host-Vorbereitung (optional)
+
+`scripts/proxmox-host-setup.sh` bereitet einen frisch installierten Proxmox-VE-Host für den produktiven Einsatz vor: Enterprise-Repo deaktivieren und `pve-no-subscription`-Repo einrichten, System aktualisieren, das Abo-Popup dauerhaft entfernen, gängige CLI-Tools installieren, Zeitzone/NTP konfigurieren. Idempotent, mit `--dry-run`, `--yes` und `--skip-*`-Flags.
+
+```bash
+sudo ./scripts/proxmox-host-setup.sh --help
+sudo ./scripts/proxmox-host-setup.sh --yes
+```
+
+### 2. Nisorga in einem LXC-Container installieren
+
+`scripts/nisorga-lxc-install.sh` legt einen neuen unprivilegierten LXC-Container an, klont dieses Repository hinein und installiert die Anwendung (über `scripts/nisorga-app-install.sh`, das dafür in den Container übertragen wird). Da dieses Repo ein `docker-compose.yml` enthält, wird automatisch Docker installiert und `docker compose up -d --build` ausgeführt — inklusive automatisch generierter `.env`/`backend/.env` mit zufälligen Secrets, falls diese noch nicht existieren (siehe [docs/deployment.md](docs/deployment.md) für die manuelle Variante mit Nginx Proxy Manager).
+
+```bash
+# Direkt in der Proxmox-Shell, ohne vorheriges Klonen:
+bash <(curl -fsSL https://raw.githubusercontent.com/Wakko97/nisorga/main/scripts/nisorga-lxc-install.sh)
+
+# Oder mit lokal ausgecheckstem Repo:
+sudo ./scripts/nisorga-lxc-install.sh --help
+sudo ./scripts/nisorga-lxc-install.sh --yes --ip 192.168.1.50/24 --gateway 192.168.1.1
+```
+
+Wichtige Optionen: `--ctid`, `--hostname`, `--storage`, `--bridge`, `--ip` (`dhcp` oder CIDR + `--gateway`), `--cores`, `--memory`, `--swap`, `--disk`, `--password`, `--branch`, `--privileged`, `--dry-run`. Am Ende gibt das Skript die Container-ID sowie das (ggf. generierte) Root-Passwort aus; Einstieg mit `pct enter <CTID>`.
+
+**Wichtig:** Google-Kalender- und SendGrid-Integration werden dabei bewusst NICHT automatisch konfiguriert (siehe [Google-Kalender-Integration einrichten](#google-kalender-integration-einrichten) und [SendGrid einrichten](#sendgrid-einrichten)) — dafür in `backend/.env` im Container (`/opt/nisorga/backend/.env`) nachtragen und `docker compose restart backend` ausführen. Ebenso ist standardmäßig kein Port für das Frontend nach außen freigegeben (siehe [docs/deployment.md](docs/deployment.md), Abschnitt zu `docker-compose.yml`) — für direkten Zugriff ohne eigenen Reverse Proxy den auskommentierten `ports`-Block beim `frontend`-Service in `docker-compose.yml` aktivieren.
