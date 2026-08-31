@@ -4,12 +4,34 @@ import { useSearchParams } from "react-router-dom";
 import { api } from "../lib/api";
 import { useSpeechRecognition } from "../hooks/useSpeechRecognition";
 import ScanCapture from "./ScanCapture";
+import { enqueueItem, flushQueue, getQueue, isNetworkError, subscribeQueue } from "../lib/offlineQueue";
 
 export default function QuickCapture() {
   const [title, setTitle] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
+  const [queuedCount, setQueuedCount] = useState(() => getQueue().length);
+  const [syncing, setSyncing] = useState(false);
+
+  async function sync() {
+    if (getQueue().length === 0) return;
+    setSyncing(true);
+    const synced = await flushQueue();
+    setSyncing(false);
+    if (synced > 0) queryClient.invalidateQueries({ queryKey: ["items"] });
+  }
+
+  useEffect(() => {
+    const unsubscribe = subscribeQueue((queue) => setQueuedCount(queue.length));
+    sync(); // attempt a flush on mount, in case items were queued in a previous session
+    window.addEventListener("online", sync);
+    return () => {
+      unsubscribe();
+      window.removeEventListener("online", sync);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // The command palette's "Neue Idee erfassen" navigates here with
   // ?focus=capture so the input is focused right away, same as pressing "n".
@@ -31,6 +53,15 @@ export default function QuickCapture() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["items"] });
       setTitle("");
+    },
+    onError: (err, title) => {
+      // Offline: queue it locally rather than losing the captured title —
+      // it's synced automatically once the connection (or the app) comes
+      // back, see lib/offlineQueue.ts.
+      if (isNetworkError(err)) {
+        enqueueItem(title);
+        setTitle("");
+      }
     },
   });
 
@@ -54,31 +85,45 @@ export default function QuickCapture() {
   }
 
   return (
-    <div className="mb-6 flex gap-2">
-      {/* Only the title input lives in the <form>: browsers only submit on
-          Enter implicitly when there's exactly one text field in the form,
-          so the file input inside ScanCapture must stay outside it. */}
-      <form onSubmit={handleSubmit} className="flex-1 min-w-0">
-        <input
-          ref={inputRef}
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder="Neue Idee oder Aufgabe erfassen… (Taste „n“ fokussiert dieses Feld, Enter speichert)"
-          className="w-full border rounded-lg px-4 py-3 min-h-[48px] text-base sm:text-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
-        />
-      </form>
-      <button
-        type="button"
-        onClick={() => (isListening ? stop() : start())}
-        disabled={!isSupported}
-        title={isSupported ? "Spracheingabe" : "Spracheingabe nicht unterstützt"}
-        className={`shrink-0 w-12 h-12 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-lg border shadow-sm text-lg ${
-          isListening ? "bg-red-600 text-white border-red-600" : "bg-white hover:bg-gray-100"
-        } disabled:opacity-40 disabled:cursor-not-allowed`}
-      >
-        🎤
-      </button>
-      <ScanCapture />
+    <div className="mb-6">
+      <div className="flex gap-2">
+        {/* Only the title input lives in the <form>: browsers only submit on
+            Enter implicitly when there's exactly one text field in the form,
+            so the file input inside ScanCapture must stay outside it. */}
+        <form onSubmit={handleSubmit} className="flex-1 min-w-0">
+          <input
+            ref={inputRef}
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Neue Idee oder Aufgabe erfassen… (Taste „n“ fokussiert dieses Feld, Enter speichert)"
+            className="input py-3 min-h-[48px] text-base sm:text-lg shadow-sm"
+          />
+        </form>
+        <button
+          type="button"
+          onClick={() => (isListening ? stop() : start())}
+          disabled={!isSupported}
+          title={isSupported ? "Spracheingabe" : "Spracheingabe nicht unterstützt"}
+          className={`shrink-0 w-12 h-12 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-lg border shadow-sm text-lg ${
+            isListening ? "bg-red-600 text-white border-red-600" : "bg-white hover:bg-gray-100"
+          } disabled:opacity-40 disabled:cursor-not-allowed`}
+        >
+          🎤
+        </button>
+        <ScanCapture />
+      </div>
+      {queuedCount > 0 && (
+        <div className="mt-2 flex items-center gap-2 text-xs text-amber-700">
+          <span className="badge-warn">
+            {syncing ? "Synchronisiere…" : `${queuedCount} offline erfasst, wartet auf Sync`}
+          </span>
+          {!syncing && (
+            <button type="button" onClick={sync} className="underline hover:no-underline">
+              Jetzt synchronisieren
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

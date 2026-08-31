@@ -35,6 +35,7 @@ function renderWithClient() {
 
 describe("QuickCapture", () => {
   beforeEach(() => {
+    localStorage.clear();
     vi.mocked(useSpeechRecognition).mockReturnValue({
       isSupported: true,
       isListening: false,
@@ -52,6 +53,19 @@ describe("QuickCapture", () => {
     await user.type(input, "Neue Idee{Enter}");
 
     expect(api.post).toHaveBeenCalledWith("/items", { title: "Neue Idee" });
+  });
+
+  it("queues the item locally when offline (network error) instead of losing it", async () => {
+    vi.mocked(api.post).mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    const user = userEvent.setup();
+    renderWithClient();
+
+    const input = screen.getByPlaceholderText(/Neue Idee oder Aufgabe erfassen/i);
+    await user.type(input, "Offline erfasst{Enter}");
+
+    expect(await screen.findByText(/1 offline erfasst, wartet auf Sync/i)).toBeInTheDocument();
+    expect(input).toHaveValue("");
+    expect(JSON.parse(localStorage.getItem("nisorga.offlineQueue.items")!)).toHaveLength(1);
   });
 
   it("disables the microphone button when speech recognition is not supported", () => {
