@@ -236,3 +236,36 @@ sudo ./scripts/nisorga-lxc-update.sh --ctid 135 --zip /root/nisorga-main.zip
 ```
 
 Wichtige Optionen: `--ctid` (Pflicht), `--branch`, `--zip`, `--dir` (Installationsverzeichnis im Container, Standard `/opt/nisorga`), `--dry-run`.
+
+### 4. Backup & Restore
+
+`scripts/nisorga-lxc-backup.sh` sichert Postgres-Datenbank und `backend/uploads/` (Anhänge) eines Containers als ein `.tar.gz` — erzeugt via `scripts/nisorga-backup.sh` im Container, danach per `pct pull` auf den Proxmox-Host geholt (damit das Backup auch bei Verlust des Containers erhalten bleibt; das Zielverzeichnis auf dem Host sollte selbst wieder in ein reguläres Proxmox-Backup/Replikation einbezogen werden).
+
+```bash
+# Backup erstellen (landet standardmäßig unter /var/lib/vz/nisorga-backups/<CTID>/ auf dem Host)
+sudo ./scripts/nisorga-lxc-backup.sh --ctid 135
+
+# Backup einspielen (DESTRUKTIV: ersetzt DB und Anhänge im Container)
+sudo ./scripts/nisorga-lxc-backup.sh --ctid 135 --restore /var/lib/vz/nisorga-backups/135/nisorga-backup-20260901-020000.tar.gz
+```
+
+Wichtige Optionen: `--ctid` (Pflicht), `--dest` (Zielverzeichnis auf dem Host), `--keep` (Aufbewahrungsanzahl im Container, Standard 7), `--restore`, `--dry-run`.
+
+### 5. Automatische Zeitpläne (Update/Backup)
+
+`scripts/nisorga-lxc-schedule.sh` richtet im Container einen systemd-Timer ein, der Update oder Backup regelmäßig automatisch anstößt — ohne Cron-Paket, nur mit Bordmitteln von Debian.
+
+```bash
+# Backup täglich um 02:00, 14 Stück aufbewahren
+sudo ./scripts/nisorga-lxc-schedule.sh --ctid 135 --task backup -- --keep 14
+
+# Update wöchentlich sonntags um 03:00 auf main
+sudo ./scripts/nisorga-lxc-schedule.sh --ctid 135 --task update --schedule "Sun 03:00" -- --branch main
+
+# Zeitplan wieder entfernen
+sudo ./scripts/nisorga-lxc-schedule.sh --ctid 135 --task backup --disable
+```
+
+Wichtige Optionen: `--ctid` (Pflicht), `--task update|backup` (Pflicht), `--schedule` (systemd-`OnCalendar`-Ausdruck, siehe `man systemd.time`; Standard: `03:00` für Updates, `02:00` für Backups), `--disable`. Alles nach `--` wird 1:1 an das geplante Skript durchgereicht (z. B. `--branch`, `--keep`).
+
+**Hinweis:** Das automatische Update pullt aus Git und baut/startet per Docker Compose neu — bei laufendem Betrieb kurzzeitig nicht erreichbar, keine Vorab-Prüfung auf Breaking Changes. Für produktive Instanzen ggf. lieber manuell anstoßen (`nisorga-lxc-update.sh`) oder vorher testen.
