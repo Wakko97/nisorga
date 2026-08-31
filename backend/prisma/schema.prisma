@@ -39,6 +39,26 @@ enum ItemSource {
 model AppState {
   id          Int     @id @default(1)
   initialized Boolean @default(false)
+
+  // Global mail configuration (Owner-managed via Settings, GET/PUT
+  // /settings/mail). Passwords are stored AES-256-GCM encrypted (see
+  // lib/crypto.ts), never in plaintext. Every field is optional and falls
+  // back to the matching SMTP_*/IMAP_* env var (see lib/mailConfig.ts) so
+  // deployments that only set env vars keep working unchanged.
+  smtpHost        String?
+  smtpPort        Int?
+  smtpSecure      Boolean @default(false)
+  smtpUser        String?
+  smtpPasswordEnc String?
+  smtpFromEmail   String?
+
+  imapHost           String?
+  imapPort           Int?
+  imapSecure         Boolean @default(true)
+  imapUser           String?
+  imapPasswordEnc    String?
+  imapMailbox        String?
+  emailInboundDomain String?
 }
 
 model User {

@@ -13,10 +13,34 @@ export interface User {
   createdAt?: string;
 }
 
+export interface SmtpSettings {
+  host: string;
+  port: number;
+  secure: boolean;
+  user: string;
+  fromEmail: string;
+  passwordSet: boolean;
+}
+
+export interface ImapSettings {
+  host: string;
+  port: number;
+  secure: boolean;
+  user: string;
+  mailbox: string;
+  inboundDomain: string;
+  passwordSet: boolean;
+}
+
+export interface MailSettings {
+  smtp: SmtpSettings;
+  imap: ImapSettings;
+}
+
 export interface SetupStatus {
   initialized: boolean;
   env: {
-    sendgridConfigured: boolean;
+    smtpConfigured: boolean;
     googleConfigured: boolean;
     emailInboundConfigured: boolean;
   };

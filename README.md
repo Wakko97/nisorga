@@ -76,7 +76,7 @@ Bei einer frischen Installation (noch kein Owner-Account angelegt) leitet die Ap
 
 1. **Willkommen** — kurzer Überblick über die App.
 2. **Owner-Account anlegen** — Name, E-Mail, Passwort (min. 8 Zeichen). Ruft `POST /setup/init` auf, das atomar genau einmal einen Owner-Account erzeugen kann (verhindert eine Race Condition bei gleichzeitigen Erstaufrufen). Ist die App bereits eingerichtet, meldet der Wizard das und verlinkt zu `/login`.
-3. **Server-Konfiguration** — reine Statusanzeige (`GET /setup/status`), ob Google Calendar, SendGrid und der E-Mail-Empfang serverseitig konfiguriert sind. Secrets werden bewusst NICHT über den Browser gesetzt — das bleibt Sache der `.env`-Datei (siehe oben und [Produktivhärtung](#produktivhärtung)).
+3. **Server-Konfiguration** — reine Statusanzeige (`GET /setup/status`), ob Google Calendar, SMTP-Versand und der E-Mail-Empfang serverseitig konfiguriert sind. Secrets werden bewusst NICHT über den Browser gesetzt — das bleibt Sache der `.env`-Datei (siehe oben und [Produktivhärtung](#produktivhärtung)).
 
 Nach Abschluss landest du eingeloggt als Owner in der Inbox. Alle späteren Selbstregistrierungen über `/register` werden automatisch `MEMBER`.
 
@@ -98,20 +98,34 @@ Siehe [docs/deployment.md](docs/deployment.md) für eine vollständige Anleitung
 ## Erweiterte Features
 
 - **Wochenrückblick** (`/review`, Backend `GET /review/weekly`): zeigt offene Inbox-Punkte, überfällige Aufgaben und seit über 3 Tagen unbearbeitete Ideen, mit Inline-Aktionen (Priorität setzen, zu Aufgabe konvertieren, zuweisen, archivieren). Dieselbe Sichtbarkeitslogik wie bei `/items` (Owner sehen alles, Mitglieder nur eigene/zugewiesene Items).
-- **E-Mail-Erfassung**: Jeder Nutzer bekommt eine persönliche Inbound-Adresse (`inbox+<token>@<EMAIL_INBOUND_DOMAIN>`, sichtbar/kopierbar unter Einstellungen). Eingehende Mails werden über SendGrid Inbound Parse als Idee in der Inbox angelegt (`source=EMAIL`).
+- **E-Mail-Erfassung**: Jeder Nutzer bekommt eine persönliche Inbound-Adresse (`inbox+<token>@<EMAIL_INBOUND_DOMAIN>`, sichtbar/kopierbar unter Einstellungen). Eingehende Mails werden per IMAP-Polling (Standard: alle 2 Minuten, `IMAP_POLL_CRON`) abgeholt und als Idee in der Inbox angelegt (`source=EMAIL`).
 - **Delegations-Tracking & Erinnerungen**: Items können auf Status „Wartet auf Rückmeldung" (`WAITING`) gesetzt werden; `waitingSince` wird automatisch gepflegt. Ein täglicher Cron-Job verschickt nach `WAITING_REMINDER_DAYS` (Default 3) eine Erinnerungsmail an Ersteller:in und Zugewiesene:n. Aufgaben-/Matrix-Ansicht zeigen ein rotes "überfällig, wartet seit X Tagen"-Badge.
 - **Wochenrückblick-Digest**: Ein wöchentlicher Cron-Job (freitags 08:00) verschickt die Wochenrückblick-Daten aller Nutzer:innen als HTML-Mail.
 - **Sprachnotiz**: Mikrofon-Button im Schnellerfassungsfeld nutzt die Web-Speech-API (`de-DE`), um gesprochenen Text direkt als Titel zu übernehmen. Wird ausgeblendet/deaktiviert, wenn der Browser die API nicht unterstützt.
 - **Kamera-Scan**: Kamera-Button (📷) im Schnellerfassungsfeld öffnet auf Mobilgeräten direkt die Rückkamera (`<input type="file" capture="environment">`). Das Foto wird clientseitig per Tesseract.js (deutsches Sprachpaket, dynamisch nachgeladen — kein Teil des Haupt-Bundles) per OCR ausgewertet; der erkannte Text (erste ~80 Zeichen) erscheint als bearbeitbarer Titel-Vorschlag. Beim Speichern wird zuerst das Item angelegt (`source=SCAN`) und danach das Foto per `POST /items/:id/attachment` als Anhang hochgeladen. Anhänge liegen serverseitig unter `UPLOADS_DIR` (Default `./uploads`) unter einem zufälligen Dateinamen und werden ausschließlich über die authentifizierte Route `GET /items/:id/attachment` ausgeliefert (kein öffentlicher Static-Mount), damit die Item-Sichtbarkeitsregeln greifen. In `docker-compose.yml` liegt `UPLOADS_DIR` auf dem benannten Volume `uploads_data`, damit Anhänge Container-Neustarts überleben.
 
-### SendGrid einrichten
+### E-Mail (SMTP/IMAP) einrichten
 
-1. Im SendGrid-Konto eine **Inbound Parse**-Domain/-Subdomain einrichten (z. B. `inbound.deine-domain.tld`) und den MX-Eintrag entsprechend SendGrid-Anleitung setzen.
-2. Als Webhook-URL `https://<backend-host>/integrations/email/inbound?secret=<EMAIL_INBOUND_SECRET>` eintragen (POST, multipart/form-data — "Post the raw, full MIME message" kann deaktiviert bleiben, da nur `to`/`subject`/`text` ausgewertet werden).
-3. In `backend/.env` `SENDGRID_API_KEY`, `SENDGRID_FROM_EMAIL`, `EMAIL_INBOUND_SECRET` und `EMAIL_INBOUND_DOMAIN` (= die eingerichtete Inbound-Parse-Domain) setzen.
-4. Ohne gesetzten `SENDGRID_API_KEY` versendet `sendEmail()` keine echten Mails, sondern loggt nur eine Warnung — lokale Entwicklung funktioniert also auch ohne SendGrid-Account.
+Nisorga verschickt Mails per SMTP und holt eingehende Mails per IMAP ab — beides läuft gegen ein normales Mail-Konto (eigener Mailserver oder ein beliebiger Provider mit SMTP/IMAP-Zugang), es wird kein externer E-Mail-Dienst (SendGrid o. ä.) benötigt.
 
-> **Hinweis:** Die Cron-Jobs (Erinnerungen, Wochendigest) laufen im selben Node-Prozess wie der API-Server (`node-cron`, registriert in `backend/src/index.ts`, deaktiviert wenn `NODE_ENV=test`). Für den Produktivbetrieb bei höherer Last ist ein separater Worker-Prozess empfehlenswert, damit lang laufende Jobs den API-Server nicht beeinträchtigen.
+**Zwei Wege, das zu konfigurieren** (siehe `backend/src/lib/mailConfig.ts`):
+
+- **Settings-UI** (empfohlen für den laufenden Betrieb): Sobald ein Owner-Account existiert, unter **Einstellungen → Mail-Konfiguration** einstellbar — wirkt sofort, kein Neustart nötig. Passwörter werden AES-256-GCM-verschlüsselt in der Datenbank abgelegt (siehe [Produktivhärtung](#produktivhärtung)) und nie an den Browser zurückgegeben.
+- **Umgebungsvariablen** (`backend/.env`): Dienen als Bootstrap-Default, bevor ein Owner-Account existiert, bzw. für rein env-basierte Deployments. Eine in der Settings-UI gesetzte Variable überschreibt die gleichnamige `.env`-Variable feldweise; alles nicht in der UI Gesetzte fällt weiterhin auf `.env` zurück.
+
+**Ausgehend (SMTP)** — für E-Mail-Verifizierung, Erinnerungen, Wochendigest:
+
+1. Host, Port, TLS, Benutzername, Passwort, Absenderadresse setzen — per UI oder in `backend/.env`: `SMTP_HOST`, `SMTP_PORT` (587 für STARTTLS, 465 für implizites TLS), `SMTP_SECURE` (`"true"` nur bei Port 465), `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM_EMAIL`.
+2. Ist nirgends ein Host gesetzt, versendet `sendEmail()` keine echten Mails, sondern loggt nur eine Warnung — lokale Entwicklung funktioniert also auch ohne Mail-Konto.
+
+**Eingehend (IMAP)** — für die E-Mail-Erfassung (Mails werden zu Items):
+
+1. Eine Mailbox einrichten, die **alle** an die Inbound-Domain adressierten Mails empfängt — entweder ein Catch-All-Postfach für diese (Sub-)Domain, oder ein Provider mit Plus-Adressierung (`inbox+<token>@...` landet dann im selben Postfach wie `inbox@...`). Ein selbst gehosteter Postfix/Dovecot unterstützt beides.
+2. Host, Port, TLS, Benutzername, Passwort, Mailbox und Inbound-Domain setzen — per UI oder in `backend/.env`: `IMAP_HOST`, `IMAP_PORT` (Standard 993), `IMAP_SECURE`, `IMAP_USER`, `IMAP_PASSWORD`, `IMAP_MAILBOX` (Standard `INBOX`) und `EMAIL_INBOUND_DOMAIN` (wird für die angezeigte Inbound-Adresse in den Einstellungen gebraucht).
+3. Das Backend pollt die Mailbox per Cron-Job (Standard: alle 2 Minuten, überschreibbar via `IMAP_POLL_CRON` in `.env`), verarbeitet ungelesene Nachrichten und markiert sie danach als gelesen — egal ob die Zustellung geklappt hat, damit eine unroutbare Mail (unbekanntes Token) nicht endlos erneut verarbeitet wird.
+4. Ist nirgends ein Host gesetzt, läuft der Poll-Job als No-Op (nur eine Warnung im Log) — lokale Entwicklung funktioniert also auch ohne Mail-Konto.
+
+> **Hinweis:** Die Cron-Jobs (Erinnerungen, Wochendigest, IMAP-Poll) laufen im selben Node-Prozess wie der API-Server (`node-cron`, registriert in `backend/src/index.ts`, deaktiviert wenn `NODE_ENV=test`). Für den Produktivbetrieb bei höherer Last ist ein separater Worker-Prozess empfehlenswert, damit lang laufende Jobs den API-Server nicht beeinträchtigen.
 
 ## Produktivhärtung
 
@@ -161,7 +175,7 @@ cd frontend
 npx playwright install --with-deps chromium
 ```
 
-Voraussetzung: `backend/.env` muss vollständig ausgefüllt sein (siehe `backend/.env.example`), insbesondere `JWT_SECRET`, `EMAIL_INBOUND_SECRET` und `GOOGLE_TOKEN_ENCRYPTION_KEY` — ohne diese startet das Backend nicht. Für die E2E-Tests genügt die normale (nicht die Test-)Datenbank aus dem Setup-Abschnitt oben, solange die Migrationen angewendet wurden (`npx prisma migrate deploy`).
+Voraussetzung: `backend/.env` muss vollständig ausgefüllt sein (siehe `backend/.env.example`), insbesondere `JWT_SECRET` und `GOOGLE_TOKEN_ENCRYPTION_KEY` — ohne diese startet das Backend nicht. Für die E2E-Tests genügt die normale (nicht die Test-)Datenbank aus dem Setup-Abschnitt oben, solange die Migrationen angewendet wurden (`npx prisma migrate deploy`).
 
 `frontend/playwright.config.ts` startet Backend (`npm run dev` in `../backend`, Port 4000) und Frontend (`npm run dev`, Port 5173) automatisch über die `webServer`-Option (Array mit zwei Einträgen), sofern sie nicht schon laufen (`reuseExistingServer: !process.env.CI`). Ein manueller Start in zwei Terminals ist daher nicht nötig, funktioniert aber genauso — Playwright erkennt bereits laufende Server auf den konfigurierten Ports und startet sie dann nicht erneut.
 
@@ -202,4 +216,23 @@ sudo ./scripts/nisorga-lxc-install.sh --yes --ip 192.168.1.50/24 --gateway 192.1
 
 Wichtige Optionen: `--ctid`, `--hostname`, `--storage`, `--bridge`, `--ip` (`dhcp` oder CIDR + `--gateway`), `--cores`, `--memory`, `--swap`, `--disk`, `--password`, `--branch`, `--privileged`, `--dry-run`. Am Ende gibt das Skript die Container-ID sowie das (ggf. generierte) Root-Passwort aus; Einstieg mit `pct enter <CTID>`.
 
-**Wichtig:** Google-Kalender- und SendGrid-Integration werden dabei bewusst NICHT automatisch konfiguriert (siehe [Google-Kalender-Integration einrichten](#google-kalender-integration-einrichten) und [SendGrid einrichten](#sendgrid-einrichten)) — dafür in `backend/.env` im Container (`/opt/nisorga/backend/.env`) nachtragen und `docker compose restart backend` ausführen. Ebenso ist standardmäßig kein Port für das Frontend nach außen freigegeben (siehe [docs/deployment.md](docs/deployment.md), Abschnitt zu `docker-compose.yml`) — für direkten Zugriff ohne eigenen Reverse Proxy den auskommentierten `ports`-Block beim `frontend`-Service in `docker-compose.yml` aktivieren.
+**Wichtig:** Google-Kalender- und SMTP/IMAP-Integration werden dabei bewusst NICHT automatisch konfiguriert (siehe [Google-Kalender-Integration einrichten](#google-kalender-integration-einrichten) und [E-Mail (SMTP/IMAP) einrichten](#e-mail-smtpimap-einrichten)). SMTP/IMAP lässt sich nach dem Einrichtungswizard direkt in der App unter Einstellungen konfigurieren; alternativ (oder für Google Kalender) in `backend/.env` im Container (`/opt/nisorga/backend/.env`) nachtragen und `docker compose restart backend` ausführen. Ebenso ist standardmäßig kein Port für das Frontend nach außen freigegeben (siehe [docs/deployment.md](docs/deployment.md), Abschnitt zu `docker-compose.yml`) — für direkten Zugriff ohne eigenen Reverse Proxy den auskommentierten `ports`-Block beim `frontend`-Service in `docker-compose.yml` aktivieren.
+
+### 3. Nisorga in einem bestehenden Container aktualisieren
+
+`scripts/nisorga-lxc-update.sh` aktualisiert einen mit `nisorga-lxc-install.sh` erstellten Container auf den neuesten Stand (über `scripts/nisorga-update.sh`, das dafür in den Container übertragen und dort ausgeführt wird) und startet ihn per `docker compose up -d --build` neu. `.env`/`backend/.env` sowie hochgeladene Anhänge (`backend/uploads/`) bleiben dabei unangetastet.
+
+Zwei Quellen für den neuen Code:
+
+- **Git (Standard)**: holt den neuesten Commit des angegebenen Branches (`git fetch` + `git reset --hard`).
+- **GitHub-ZIP**: ein lokal heruntergeladenes ZIP (z. B. über GitHub "Code → Download ZIP" für einen Branch/Tag/Commit, oder ein Release-Asset) wird auf den Proxmox-Host hochgeladen, in den Container übertragen und dort eingespielt — praktisch ohne Git-Zugriff aus dem Container heraus, oder um gezielt einen bestimmten heruntergeladenen Stand einzuspielen.
+
+```bash
+# Update per Git auf den neuesten main-Commit
+sudo ./scripts/nisorga-lxc-update.sh --ctid 135
+
+# Update aus einem lokal heruntergeladenen GitHub-ZIP
+sudo ./scripts/nisorga-lxc-update.sh --ctid 135 --zip /root/nisorga-main.zip
+```
+
+Wichtige Optionen: `--ctid` (Pflicht), `--branch`, `--zip`, `--dir` (Installationsverzeichnis im Container, Standard `/opt/nisorga`), `--dry-run`.

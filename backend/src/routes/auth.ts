@@ -5,7 +5,7 @@ import rateLimit from "express-rate-limit";
 import { prisma } from "../lib/prisma";
 import { signToken, requireAuth } from "../middleware/auth";
 import { rotateRefreshToken, revokeRefreshToken } from "../lib/refreshToken";
-import { sendEmail } from "../lib/sendgrid";
+import { sendEmail } from "../lib/mailer";
 import { issueSessionCookies, clearSessionCookies, ACCESS_COOKIE_OPTS, REFRESH_COOKIE_OPTS } from "../lib/session";
 
 const router = Router();

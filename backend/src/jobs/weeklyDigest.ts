@@ -1,5 +1,5 @@
 import { prisma } from "../lib/prisma";
-import { sendEmail } from "../lib/sendgrid";
+import { sendEmail } from "../lib/mailer";
 import { getWeeklyReviewData } from "../routes/review";
 import { AuthUser } from "../middleware/auth";
 

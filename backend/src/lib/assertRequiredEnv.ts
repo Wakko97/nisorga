@@ -9,7 +9,7 @@
 export function assertRequiredEnv(): void {
   if (process.env.NODE_ENV === "test") return;
 
-  const required = ["JWT_SECRET", "GOOGLE_TOKEN_ENCRYPTION_KEY", "EMAIL_INBOUND_SECRET"];
+  const required = ["JWT_SECRET", "GOOGLE_TOKEN_ENCRYPTION_KEY"];
   const missing = required.filter((name) => !process.env[name]);
 
   if (missing.length > 0) {

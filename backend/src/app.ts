@@ -17,7 +17,6 @@ import googleIntegrationRouter from "./routes/googleIntegration";
 import settingsRouter from "./routes/settings";
 import apiV1Router from "./routes/apiV1";
 import reviewRouter from "./routes/review";
-import emailInboundRouter from "./routes/emailInbound";
 import setupRouter from "./routes/setup";
 
 const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173";
@@ -47,7 +46,6 @@ app.use("/integrations/google", googleIntegrationRouter);
 app.use("/settings", settingsRouter);
 app.use("/api/v1", apiV1Router);
 app.use("/review", reviewRouter);
-app.use("/integrations/email", emailInboundRouter);
 app.use("/setup", setupRouter);
 
 app.use((req, res) => {

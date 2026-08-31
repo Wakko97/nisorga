@@ -1,15 +1,48 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
-import { ApiKeyInfo, WebhookSubscription } from "../lib/types";
+import { useAuth } from "../context/AuthContext";
+import { ApiKeyInfo, WebhookSubscription, MailSettings } from "../lib/types";
 
 const EVENT_OPTIONS = ["item.created", "item.updated"];
+
+interface SmtpForm {
+  host: string;
+  port: number;
+  secure: boolean;
+  user: string;
+  fromEmail: string;
+  password: string;
+}
+
+interface ImapForm {
+  host: string;
+  port: number;
+  secure: boolean;
+  user: string;
+  mailbox: string;
+  inboundDomain: string;
+  password: string;
+}
+
+const EMPTY_SMTP_FORM: SmtpForm = { host: "", port: 587, secure: false, user: "", fromEmail: "", password: "" };
+const EMPTY_IMAP_FORM: ImapForm = {
+  host: "",
+  port: 993,
+  secure: true,
+  user: "",
+  mailbox: "INBOX",
+  inboundDomain: "",
+  password: "",
+};
 
 export default function Settings() {
   const [searchParams] = useSearchParams();
   const googleParam = searchParams.get("google");
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const isOwner = user?.role === "OWNER";
 
   const { data: googleStatus } = useQuery<{ connected: boolean }>({
     queryKey: ["google-status"],
@@ -75,6 +108,52 @@ export default function Settings() {
     },
   });
 
+  // Mail configuration (SMTP send + IMAP receive) — Owner only. Only
+  // fetched for an Owner: a Member would just get a 403.
+  const { data: mailSettings } = useQuery<MailSettings>({
+    queryKey: ["settings-mail"],
+    queryFn: () => api.get("/settings/mail"),
+    enabled: isOwner,
+  });
+
+  const [smtpForm, setSmtpForm] = useState<SmtpForm>(EMPTY_SMTP_FORM);
+  const [imapForm, setImapForm] = useState<ImapForm>(EMPTY_IMAP_FORM);
+  const [smtpSaved, setSmtpSaved] = useState(false);
+  const [imapSaved, setImapSaved] = useState(false);
+
+  // Populate the forms once the current settings arrive - passwords are
+  // never sent back by the API, so that field always starts empty (an
+  // empty field on save means "leave the stored password unchanged").
+  useEffect(() => {
+    if (!mailSettings) return;
+    setSmtpForm({ ...mailSettings.smtp, password: "" });
+    setImapForm({ ...mailSettings.imap, password: "" });
+  }, [mailSettings]);
+
+  const saveSmtp = useMutation({
+    mutationFn: (form: SmtpForm) => {
+      const { password, ...rest } = form;
+      return api.put("/settings/mail", { smtp: password ? { ...rest, password } : rest });
+    },
+    onSuccess: () => {
+      setSmtpSaved(true);
+      setTimeout(() => setSmtpSaved(false), 2000);
+      queryClient.invalidateQueries({ queryKey: ["settings-mail"] });
+    },
+  });
+
+  const saveImap = useMutation({
+    mutationFn: (form: ImapForm) => {
+      const { password, ...rest } = form;
+      return api.put("/settings/mail", { imap: password ? { ...rest, password } : rest });
+    },
+    onSuccess: () => {
+      setImapSaved(true);
+      setTimeout(() => setImapSaved(false), 2000);
+      queryClient.invalidateQueries({ queryKey: ["settings-mail"] });
+    },
+  });
+
   return (
     <div className="space-y-8 max-w-2xl">
       <h1 className="text-2xl font-semibold">Einstellungen</h1>
@@ -131,6 +210,126 @@ export default function Settings() {
           überfälligen Aufgaben und unbearbeiteten Ideen.
         </p>
       </section>
+
+      {isOwner && (
+        <section className="bg-white border rounded-lg p-4">
+          <h2 className="font-semibold mb-1">Mail-Konfiguration</h2>
+          <p className="text-xs text-gray-500 mb-4">
+            Gilt für die ganze Instanz (nicht pro Nutzer:in). Überschreibt die entsprechenden
+            SMTP_*/IMAP_*-Umgebungsvariablen, falls dort ebenfalls etwas gesetzt ist.
+          </p>
+
+          <h3 className="text-sm font-medium mb-2">Ausgehend (SMTP)</h3>
+          <div className="grid grid-cols-2 gap-2 mb-2">
+            <input
+              value={smtpForm.host}
+              onChange={(e) => setSmtpForm((f) => ({ ...f, host: e.target.value }))}
+              placeholder="Host (smtp.example.com)"
+              className="col-span-2 border rounded px-3 py-2 text-sm"
+            />
+            <input
+              type="number"
+              value={smtpForm.port}
+              onChange={(e) => setSmtpForm((f) => ({ ...f, port: Number(e.target.value) }))}
+              placeholder="Port"
+              className="border rounded px-3 py-2 text-sm"
+            />
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={smtpForm.secure}
+                onChange={(e) => setSmtpForm((f) => ({ ...f, secure: e.target.checked }))}
+              />
+              TLS (Port 465)
+            </label>
+            <input
+              value={smtpForm.user}
+              onChange={(e) => setSmtpForm((f) => ({ ...f, user: e.target.value }))}
+              placeholder="Benutzername"
+              className="border rounded px-3 py-2 text-sm"
+            />
+            <input
+              type="password"
+              value={smtpForm.password}
+              onChange={(e) => setSmtpForm((f) => ({ ...f, password: e.target.value }))}
+              placeholder={mailSettings?.smtp.passwordSet ? "•••••• (gesetzt, leer lassen zum Beibehalten)" : "Passwort"}
+              className="border rounded px-3 py-2 text-sm"
+            />
+            <input
+              value={smtpForm.fromEmail}
+              onChange={(e) => setSmtpForm((f) => ({ ...f, fromEmail: e.target.value }))}
+              placeholder="Absenderadresse (noreply@...)"
+              className="col-span-2 border rounded px-3 py-2 text-sm"
+            />
+          </div>
+          <button
+            onClick={() => saveSmtp.mutate(smtpForm)}
+            className="text-sm px-3 py-1.5 rounded bg-gray-900 text-white mb-6"
+          >
+            {smtpSaved ? "Gespeichert!" : "SMTP speichern"}
+          </button>
+
+          <h3 className="text-sm font-medium mb-2">Eingehend (IMAP)</h3>
+          <div className="grid grid-cols-2 gap-2 mb-2">
+            <input
+              value={imapForm.host}
+              onChange={(e) => setImapForm((f) => ({ ...f, host: e.target.value }))}
+              placeholder="Host (imap.example.com)"
+              className="col-span-2 border rounded px-3 py-2 text-sm"
+            />
+            <input
+              type="number"
+              value={imapForm.port}
+              onChange={(e) => setImapForm((f) => ({ ...f, port: Number(e.target.value) }))}
+              placeholder="Port"
+              className="border rounded px-3 py-2 text-sm"
+            />
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={imapForm.secure}
+                onChange={(e) => setImapForm((f) => ({ ...f, secure: e.target.checked }))}
+              />
+              TLS
+            </label>
+            <input
+              value={imapForm.user}
+              onChange={(e) => setImapForm((f) => ({ ...f, user: e.target.value }))}
+              placeholder="Benutzername"
+              className="border rounded px-3 py-2 text-sm"
+            />
+            <input
+              type="password"
+              value={imapForm.password}
+              onChange={(e) => setImapForm((f) => ({ ...f, password: e.target.value }))}
+              placeholder={mailSettings?.imap.passwordSet ? "•••••• (gesetzt, leer lassen zum Beibehalten)" : "Passwort"}
+              className="border rounded px-3 py-2 text-sm"
+            />
+            <input
+              value={imapForm.mailbox}
+              onChange={(e) => setImapForm((f) => ({ ...f, mailbox: e.target.value }))}
+              placeholder="Mailbox (INBOX)"
+              className="border rounded px-3 py-2 text-sm"
+            />
+            <input
+              value={imapForm.inboundDomain}
+              onChange={(e) => setImapForm((f) => ({ ...f, inboundDomain: e.target.value }))}
+              placeholder="Inbound-Domain (inbound.example.com)"
+              className="col-span-2 border rounded px-3 py-2 text-sm"
+            />
+          </div>
+          <p className="text-xs text-gray-500 mb-2">
+            Die Inbound-Domain muss alle an sie adressierten Mails in dieses Postfach zustellen (Catch-All oder
+            Plus-Adressierung) — siehe README, Abschnitt „E-Mail (SMTP/IMAP) einrichten".
+          </p>
+          <button
+            onClick={() => saveImap.mutate(imapForm)}
+            className="text-sm px-3 py-1.5 rounded bg-gray-900 text-white"
+          >
+            {imapSaved ? "Gespeichert!" : "IMAP speichern"}
+          </button>
+        </section>
+      )}
 
       <section className="bg-white border rounded-lg p-4">
         <h2 className="font-semibold mb-2">API-Keys</h2>

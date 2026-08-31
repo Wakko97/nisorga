@@ -97,9 +97,8 @@ prepare_compose_env_files() {
         sed -i "s#^DATABASE_URL=.*#DATABASE_URL=\"postgresql://${pg_user}:${pg_pass}@postgres:5432/${pg_db}?schema=public\"#" backend/.env
         sed -i "s#^JWT_SECRET=.*#JWT_SECRET=\"$(openssl rand -hex 32)\"#" backend/.env
         sed -i "s#^GOOGLE_TOKEN_ENCRYPTION_KEY=.*#GOOGLE_TOKEN_ENCRYPTION_KEY=\"$(openssl rand -hex 32)\"#" backend/.env
-        sed -i "s#^EMAIL_INBOUND_SECRET=.*#EMAIL_INBOUND_SECRET=\"$(openssl rand -hex 16)\"#" backend/.env
 
-        log WARN "backend/.env was created with generated secrets. Google Calendar and SendGrid are left unconfigured (GOOGLE_CLIENT_ID/SECRET, SENDGRID_API_KEY) - fill them in manually if needed, then 'docker compose restart backend'."
+        log WARN "backend/.env was created with generated secrets. Google Calendar (GOOGLE_CLIENT_ID/SECRET) is left unconfigured - fill it in manually if needed, then 'docker compose restart backend'. SMTP/IMAP (mail send/receive) can be configured the same way, or later in the app itself under Settings once an Owner account exists."
     fi
 }
 

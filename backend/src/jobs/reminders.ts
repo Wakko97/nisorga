@@ -1,5 +1,5 @@
 import { prisma, publicUserSelect } from "../lib/prisma";
-import { sendEmail } from "../lib/sendgrid";
+import { sendEmail } from "../lib/mailer";
 
 const WAITING_REMINDER_DAYS = Number(process.env.WAITING_REMINDER_DAYS || 3);
 

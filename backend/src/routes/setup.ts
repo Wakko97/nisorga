@@ -3,20 +3,23 @@ import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { prisma } from "../lib/prisma";
 import { issueSessionCookies } from "../lib/session";
+import { getSmtpConfig, getImapConfig } from "../lib/mailConfig";
 
 const router = Router();
 
 // GET /setup/status — no auth. Lets the frontend decide whether to show the
-// setup wizard, and which integrations still need env vars configured.
-// Only booleans are exposed, never the underlying secret values.
+// setup wizard, and which integrations still need configuring (either via
+// env vars or, once an Owner exists, the Settings UI). Only booleans are
+// exposed, never the underlying secret values.
 router.get("/status", async (_req, res) => {
   const appState = await prisma.appState.findUnique({ where: { id: 1 } });
+  const [smtp, imap] = await Promise.all([getSmtpConfig(), getImapConfig()]);
   res.json({
     initialized: !!appState?.initialized,
     env: {
-      sendgridConfigured: !!process.env.SENDGRID_API_KEY,
+      smtpConfigured: !!smtp,
       googleConfigured: !!(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET),
-      emailInboundConfigured: !!process.env.EMAIL_INBOUND_DOMAIN,
+      emailInboundConfigured: !!imap,
     },
   });
 });
