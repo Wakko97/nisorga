@@ -2,8 +2,10 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "../lib/api";
+import { useSetupStatus } from "../context/AuthContext";
 
 export default function Register() {
+  const { data: setupStatus } = useSetupStatus();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
@@ -31,9 +33,6 @@ export default function Register() {
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <form onSubmit={handleSubmit} className="w-full max-w-sm bg-white p-6 rounded-lg shadow border">
         <h1 className="text-xl font-semibold mb-4">Registrieren</h1>
-        <p className="text-xs text-gray-500 mb-3">
-          Der erste registrierte Benutzer wird automatisch zum Owner.
-        </p>
         {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
         <label htmlFor="register-name" className="block text-sm mb-1">Name</label>
         <input
@@ -59,7 +58,7 @@ export default function Register() {
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           required
-          minLength={6}
+          minLength={8}
           className="w-full border rounded px-3 py-2 mb-4"
         />
         <button
@@ -75,6 +74,14 @@ export default function Register() {
             Anmelden
           </Link>
         </p>
+        {setupStatus?.initialized === false && (
+          <p className="text-sm text-gray-500 mt-2">
+            Erststart?{" "}
+            <Link to="/setup" className="underline">
+              Zur Einrichtung
+            </Link>
+          </p>
+        )}
       </form>
     </div>
   );

@@ -58,6 +58,22 @@ describe("refresh token rotation", () => {
     expect(afterTheft.status).toBe(401);
   });
 
+  it("under concurrent refresh with the same token, exactly one call succeeds", async () => {
+    const registerRes = await request(app)
+      .post("/auth/register")
+      .send({ email: "owner@test.com", password: "password123", name: "Owner" });
+    const cookies = registerRes.headers["set-cookie"] as unknown as string[];
+    const originalRefresh = getCookie(cookies, "refreshToken");
+
+    const [a, b] = await Promise.all([
+      request(app).post("/auth/refresh").set("Cookie", originalRefresh),
+      request(app).post("/auth/refresh").set("Cookie", originalRefresh),
+    ]);
+
+    const statuses = [a.status, b.status].sort();
+    expect(statuses).toEqual([200, 401]);
+  });
+
   it("rejects a missing or garbage refresh token", async () => {
     const res = await request(app).post("/auth/refresh").set("Cookie", "refreshToken=not-a-real-token");
     expect(res.status).toBe(401);

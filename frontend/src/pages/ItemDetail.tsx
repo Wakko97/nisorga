@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { useParams, useNavigate, Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "../lib/api";
 import { Item, User, Comment } from "../lib/types";
@@ -10,8 +10,10 @@ export default function ItemDetail() {
   const queryClient = useQueryClient();
   const [commentBody, setCommentBody] = useState("");
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
+  const [titleDraft, setTitleDraft] = useState("");
+  const [descriptionDraft, setDescriptionDraft] = useState("");
 
-  const { data: item, isLoading } = useQuery<Item>({
+  const { data: item, isLoading, isError } = useQuery<Item>({
     queryKey: ["items", id],
     queryFn: async () => {
       // There is no single-item GET endpoint; the item list is filtered client-side.
@@ -21,7 +23,15 @@ export default function ItemDetail() {
       return found;
     },
     enabled: !!id,
+    retry: false,
   });
+
+  useEffect(() => {
+    if (item) {
+      setTitleDraft(item.title);
+      setDescriptionDraft(item.description ?? "");
+    }
+  }, [item?.id]);
   const { data: users } = useQuery<User[]>({ queryKey: ["users"], queryFn: () => api.get("/users") });
   const { data: comments } = useQuery<Comment[]>({
     queryKey: ["comments", id],
@@ -68,14 +78,30 @@ export default function ItemDetail() {
     onError: (err) => setSyncMessage(err instanceof ApiError ? err.message : "Sync fehlgeschlagen"),
   });
 
-  if (isLoading || !item) return <p className="text-gray-500">Lädt…</p>;
+  if (isLoading) return <p className="text-gray-500">Lädt…</p>;
+
+  if (isError || !item) {
+    return (
+      <div className="max-w-2xl bg-white border rounded-lg p-6">
+        <p className="text-gray-700 mb-3">
+          Dieses Item existiert nicht oder du hast keinen Zugriff darauf.
+        </p>
+        <Link to="/inbox" className="text-sm underline text-gray-600">
+          Zurück zur Inbox
+        </Link>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-2xl bg-white border rounded-lg p-6">
       <div className="flex items-center justify-between mb-4">
         <input
-          value={item.title}
-          onChange={(e) => updateItem.mutate({ title: e.target.value })}
+          value={titleDraft}
+          onChange={(e) => setTitleDraft(e.target.value)}
+          onBlur={() => {
+            if (titleDraft !== item.title) updateItem.mutate({ title: titleDraft });
+          }}
           className="text-xl font-semibold border-b border-transparent focus:border-gray-300 focus:outline-none flex-1"
         />
         <button
@@ -87,8 +113,11 @@ export default function ItemDetail() {
       </div>
 
       <textarea
-        value={item.description ?? ""}
-        onChange={(e) => updateItem.mutate({ description: e.target.value })}
+        value={descriptionDraft}
+        onChange={(e) => setDescriptionDraft(e.target.value)}
+        onBlur={() => {
+          if (descriptionDraft !== (item.description ?? "")) updateItem.mutate({ description: descriptionDraft });
+        }}
         placeholder="Beschreibung…"
         className="w-full border rounded px-3 py-2 mb-4 text-sm"
         rows={4}

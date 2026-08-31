@@ -2,20 +2,24 @@ import { Router } from "express";
 import { prisma, publicUserSelect } from "../lib/prisma";
 import { requireAuth } from "../middleware/auth";
 import { fireWebhooks } from "../lib/webhooks";
+import { visibilityWhere, findItemForUser } from "../lib/itemAuthorization";
 
 const router = Router();
 router.use(requireAuth);
 
-function visibilityWhere(user: NonNullable<Express.Request["user"]>) {
-  if (user.role === "OWNER") return {};
-  return {
-    OR: [{ createdById: user.id }, { assignedToId: user.id }],
-  };
-}
+const VALID_TYPES = ["IDEA", "TASK"];
+const VALID_STATUSES = ["INBOX", "TODO", "IN_PROGRESS", "WAITING", "DONE"];
 
 router.get("/", async (req, res) => {
   const user = req.user!;
   const { type, status } = req.query;
+
+  if (type !== undefined && !VALID_TYPES.includes(String(type))) {
+    return res.status(400).json({ error: "Invalid type" });
+  }
+  if (status !== undefined && !VALID_STATUSES.includes(String(status))) {
+    return res.status(400).json({ error: "Invalid status" });
+  }
 
   const items = await prisma.item.findMany({
     where: {
@@ -43,6 +47,7 @@ router.post("/", async (req, res) => {
       important: !!important,
       urgent: !!urgent,
       dueDate: dueDate ? new Date(dueDate) : null,
+      waitingSince: status === "WAITING" ? new Date() : null,
       createdById: user.id,
       assignedToId: assignedToId ?? null,
     },
@@ -51,14 +56,6 @@ router.post("/", async (req, res) => {
   fireWebhooks(user.id, "item.created", item);
   res.status(201).json(item);
 });
-
-async function findItemForUser(id: string, user: NonNullable<Express.Request["user"]>) {
-  const item = await prisma.item.findUnique({ where: { id } });
-  if (!item) return null;
-  if (user.role === "OWNER") return item;
-  if (item.createdById === user.id || item.assignedToId === user.id) return item;
-  return "forbidden" as const;
-}
 
 router.patch("/:id", async (req, res) => {
   const user = req.user!;

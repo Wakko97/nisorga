@@ -1,20 +1,29 @@
 import { describe, it, expect } from "vitest";
 import request from "supertest";
 import { app } from "../src/app";
+import { prisma } from "../src/lib/prisma";
 
 describe("auth", () => {
-  it("registers the first user as OWNER and subsequent users as MEMBER", async () => {
-    const owner = await request(app)
+  it("registers every self-registered user as MEMBER (OWNER is created only via the setup wizard)", async () => {
+    const first = await request(app)
       .post("/auth/register")
-      .send({ email: "owner@test.com", password: "password123", name: "Owner" });
-    expect(owner.status).toBe(201);
-    expect(owner.body.role).toBe("OWNER");
+      .send({ email: "first@test.com", password: "password123", name: "First" });
+    expect(first.status).toBe(201);
+    expect(first.body.role).toBe("MEMBER");
 
-    const member = await request(app)
+    const second = await request(app)
       .post("/auth/register")
-      .send({ email: "member@test.com", password: "password123", name: "Member" });
-    expect(member.status).toBe(201);
-    expect(member.body.role).toBe("MEMBER");
+      .send({ email: "second@test.com", password: "password123", name: "Second" });
+    expect(second.status).toBe(201);
+    expect(second.body.role).toBe("MEMBER");
+  });
+
+  it("rejects registration before the setup wizard has run", async () => {
+    await prisma.appState.update({ where: { id: 1 }, data: { initialized: false } });
+    const res = await request(app)
+      .post("/auth/register")
+      .send({ email: "toosoon@test.com", password: "password123", name: "Too Soon" });
+    expect(res.status).toBe(403);
   });
 
   it("never returns passwordHash or emailInboundToken from register/login/me", async () => {

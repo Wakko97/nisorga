@@ -2,8 +2,10 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "../lib/api";
+import { useSetupStatus } from "../context/AuthContext";
 
 export default function Login() {
+  const { data: setupStatus } = useSetupStatus();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -62,6 +64,14 @@ export default function Login() {
             Registrieren
           </Link>
         </p>
+        {setupStatus?.initialized === false && (
+          <p className="text-sm text-gray-500 mt-2">
+            Erststart?{" "}
+            <Link to="/setup" className="underline">
+              Zur Einrichtung
+            </Link>
+          </p>
+        )}
       </form>
     </div>
   );

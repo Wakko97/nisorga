@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { api } from "../lib/api";
 import { Item } from "../lib/types";
 import { daysSince, isWaitingOverdue } from "../lib/waiting";
+import { useAuth } from "../context/AuthContext";
 
 const QUADRANTS: { key: string; important: boolean; urgent: boolean; label: string; color: string }[] = [
   { key: "do", important: true, urgent: true, label: "Wichtig & Dringend — Sofort erledigen", color: "bg-red-50 border-red-200" },
@@ -12,7 +13,7 @@ const QUADRANTS: { key: string; important: boolean; urgent: boolean; label: stri
   { key: "drop", important: false, urgent: false, label: "Weder noch — Streichen/Später", color: "bg-gray-50 border-gray-200" },
 ];
 
-function DraggableCard({ item }: { item: Item }) {
+function DraggableCard({ item, overdueDays }: { item: Item; overdueDays?: number }) {
   const { attributes, listeners, setNodeRef, transform } = useDraggable({ id: item.id });
   const style = transform
     ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`, zIndex: 10 }
@@ -29,7 +30,7 @@ function DraggableCard({ item }: { item: Item }) {
       <Link to={`/items/${item.id}`} onClick={(e) => e.stopPropagation()} className="text-sm hover:underline">
         {item.title}
       </Link>
-      {isWaitingOverdue(item.status, item.waitingSince) && (
+      {isWaitingOverdue(item.status, item.waitingSince, overdueDays) && (
         <span className="block mt-1 text-xs px-1.5 py-0.5 rounded bg-red-100 text-red-700 w-fit">
           überfällig, wartet seit {daysSince(item.waitingSince!)} Tagen
         </span>
@@ -41,9 +42,11 @@ function DraggableCard({ item }: { item: Item }) {
 function Quadrant({
   quadrant,
   items,
+  overdueDays,
 }: {
   quadrant: (typeof QUADRANTS)[number];
   items: Item[];
+  overdueDays?: number;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: quadrant.key });
   return (
@@ -53,13 +56,14 @@ function Quadrant({
     >
       <h3 className="text-sm font-semibold mb-2">{quadrant.label}</h3>
       {items.map((item) => (
-        <DraggableCard key={item.id} item={item} />
+        <DraggableCard key={item.id} item={item} overdueDays={overdueDays} />
       ))}
     </div>
   );
 }
 
 export default function Matrix() {
+  const { user } = useAuth();
   const queryClient = useQueryClient();
   const { data: items } = useQuery<Item[]>({
     queryKey: ["items"],
@@ -94,6 +98,7 @@ export default function Matrix() {
               key={q.key}
               quadrant={q}
               items={visible.filter((i) => i.important === q.important && i.urgent === q.urgent)}
+              overdueDays={user?.waitingReminderDays}
             />
           ))}
         </div>

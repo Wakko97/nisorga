@@ -1,6 +1,7 @@
 import { Router } from "express";
 import multer from "multer";
 import { prisma } from "../lib/prisma";
+import { fireWebhooks } from "../lib/webhooks";
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -48,6 +49,7 @@ router.post("/inbound", upload.none(), async (req, res) => {
     },
   });
 
+  fireWebhooks(user.id, "item.created", item);
   res.status(201).json({ ok: true, itemId: item.id });
 });
 

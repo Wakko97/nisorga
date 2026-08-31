@@ -1,8 +1,36 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import request from "supertest";
 import { app } from "../src/app";
+import * as webhooksLib from "../src/lib/webhooks";
 
 describe("email inbound", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("fires webhooks for an item created via inbound email", async () => {
+    const fireWebhooksSpy = vi.spyOn(webhooksLib, "fireWebhooks").mockResolvedValue(undefined);
+
+    const owner = await request(app)
+      .post("/auth/register")
+      .send({ email: "owner@test.com", password: "password123", name: "Owner" });
+    const ownerCookie = owner.headers["set-cookie"];
+
+    const emailSettings = await request(app).get("/settings/email").set("Cookie", ownerCookie);
+    const address: string = emailSettings.body.address;
+
+    const res = await request(app)
+      .post(`/integrations/email/inbound?secret=${process.env.EMAIL_INBOUND_SECRET}`)
+      .field("to", address)
+      .field("subject", "Idee per Mail")
+      .field("text", "Inhalt der Mail");
+    expect(res.status).toBe(201);
+
+    expect(fireWebhooksSpy).toHaveBeenCalledWith(owner.body.id, "item.created", expect.objectContaining({ source: "EMAIL" }));
+  });
+});
+
+describe("email inbound (legacy)", () => {
   it("rejects requests with a missing or wrong shared secret", async () => {
     const res = await request(app)
       .post("/integrations/email/inbound?secret=wrong")

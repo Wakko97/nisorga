@@ -5,7 +5,11 @@ export function daysSince(dateStr: string): number {
   return Math.floor(ms / (24 * 60 * 60 * 1000));
 }
 
-export function isWaitingOverdue(status: string, waitingSince: string | null): boolean {
+export function isWaitingOverdue(
+  status: string,
+  waitingSince: string | null,
+  overdueDays: number = WAITING_OVERDUE_DAYS
+): boolean {
   if (status !== "WAITING" || !waitingSince) return false;
-  return daysSince(waitingSince) >= WAITING_OVERDUE_DAYS;
+  return daysSince(waitingSince) >= overdueDays;
 }

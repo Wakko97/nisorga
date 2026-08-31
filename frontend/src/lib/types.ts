@@ -9,7 +9,17 @@ export interface User {
   name: string;
   role: Role;
   emailVerified?: boolean;
+  waitingReminderDays?: number;
   createdAt?: string;
+}
+
+export interface SetupStatus {
+  initialized: boolean;
+  env: {
+    sendgridConfigured: boolean;
+    googleConfigured: boolean;
+    emailInboundConfigured: boolean;
+  };
 }
 
 export interface Item {

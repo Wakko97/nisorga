@@ -1,8 +1,28 @@
 import { google } from "googleapis";
+import jwt from "jsonwebtoken";
+import crypto from "crypto";
 import { prisma } from "./prisma";
 import { encrypt, decrypt } from "./crypto";
 
 export const GOOGLE_SCOPES = ["https://www.googleapis.com/auth/calendar.events"];
+
+const OAUTH_STATE_TTL = "10m";
+
+/**
+ * Signs a short-lived, tamper-proof `state` token binding the OAuth flow to
+ * a specific user. Prevents an attacker from crafting a callback request
+ * that links their own Google account to someone else's (state CSRF).
+ */
+export function signOAuthState(userId: string): string {
+  return jwt.sign({ uid: userId, nonce: crypto.randomUUID() }, process.env.JWT_SECRET!, {
+    expiresIn: OAUTH_STATE_TTL,
+  });
+}
+
+/** Verifies a `state` token produced by signOAuthState. Throws if invalid/expired/tampered. */
+export function verifyOAuthState(state: string): { uid: string } {
+  return jwt.verify(state, process.env.JWT_SECRET!) as { uid: string };
+}
 
 export function createOAuthClient() {
   return new google.auth.OAuth2(

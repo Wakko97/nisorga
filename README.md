@@ -17,7 +17,7 @@ Monorepo mit npm workspaces:
 - **GTD-Workflow**: Items landen in der Inbox und werden von dort verfeinert (Typ, Priorität, Zuweisung, Status).
 - **Eisenhower-Matrix**: Items per Drag & Drop zwischen den vier Quadranten (wichtig/dringend) verschieben.
 - **Aufgabenliste** mit Filtern nach Status, Zuweisung, Fälligkeit.
-- **Mehrbenutzer**: Der erste registrierte User wird automatisch `OWNER`, alle weiteren `MEMBER`. Owner sehen alle Items, Mitglieder nur eigene bzw. ihnen zugewiesene.
+- **Mehrbenutzer**: Der Owner-Account wird einmalig über den [Einrichtungswizard](#einrichtungswizard) angelegt, alle Selbstregistrierungen danach werden `MEMBER`. Owner sehen alle Items, Mitglieder nur eigene bzw. ihnen zugewiesene.
 - **Google-Kalender-Sync**: OAuth2-Verbindung, Items mit Fälligkeitsdatum können als Kalender-Event angelegt/aktualisiert werden.
 - **Offene Integrations-API** (`/api/v1`): externe Systeme können per API-Key Items anlegen/lesen. Zusätzlich können Webhooks abonniert werden, die bei `item.created`/`item.updated` ausgelöst werden.
 
@@ -67,6 +67,18 @@ Monorepo mit npm workspaces:
 
    Backend läuft standardmäßig auf `http://localhost:4000`, Frontend auf `http://localhost:5173`.
 
+5. Frontend im Browser öffnen (`http://localhost:5173`) — bei einer frischen Installation leitet die App automatisch zum [Einrichtungswizard](#einrichtungswizard) weiter.
+
+## Einrichtungswizard
+
+Bei einer frischen Installation (noch kein Owner-Account angelegt) leitet die App jede Route auf `/setup` um. Der Wizard führt durch:
+
+1. **Willkommen** — kurzer Überblick über die App.
+2. **Owner-Account anlegen** — Name, E-Mail, Passwort (min. 8 Zeichen). Ruft `POST /setup/init` auf, das atomar genau einmal einen Owner-Account erzeugen kann (verhindert eine Race Condition bei gleichzeitigen Erstaufrufen). Ist die App bereits eingerichtet, meldet der Wizard das und verlinkt zu `/login`.
+3. **Server-Konfiguration** — reine Statusanzeige (`GET /setup/status`), ob Google Calendar, SendGrid und der E-Mail-Empfang serverseitig konfiguriert sind. Secrets werden bewusst NICHT über den Browser gesetzt — das bleibt Sache der `.env`-Datei (siehe oben und [Produktivhärtung](#produktivhärtung)).
+
+Nach Abschluss landest du eingeloggt als Owner in der Inbox. Alle späteren Selbstregistrierungen über `/register` werden automatisch `MEMBER`.
+
 ## Google-Kalender-Integration einrichten
 
 1. In der Google Cloud Console ein Projekt anlegen, die "Google Calendar API" aktivieren.
@@ -77,6 +89,10 @@ Monorepo mit npm workspaces:
 ## Externe Integrations-API
 
 Siehe [docs/api.md](docs/api.md) für die vollständige Dokumentation der `/api/v1`-Schnittstelle (API-Key-Auth) sowie der Webhooks.
+
+## Docker-Deployment
+
+Siehe [docs/deployment.md](docs/deployment.md) für eine vollständige Anleitung, wie die App per Docker Compose (Backend, Frontend, PostgreSQL) hinter einem bereits laufenden Nginx Proxy Manager bereitgestellt wird.
 
 ## Erweiterte Features
 

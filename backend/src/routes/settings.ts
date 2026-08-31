@@ -3,6 +3,7 @@ import crypto from "crypto";
 import { prisma } from "../lib/prisma";
 import { requireAuth } from "../middleware/auth";
 import { generateApiKey } from "../lib/apiKey";
+import { assertPublicHttpUrl } from "../lib/ssrfGuard";
 
 const router = Router();
 router.use(requireAuth);
@@ -67,6 +68,13 @@ router.post("/webhooks", async (req, res) => {
   if (!url || !Array.isArray(events) || events.length === 0) {
     return res.status(400).json({ error: "url and non-empty events[] are required" });
   }
+
+  try {
+    await assertPublicHttpUrl(url);
+  } catch {
+    return res.status(400).json({ error: "URL not allowed" });
+  }
+
   const hook = await prisma.webhookSubscription.create({
     data: { userId: req.user!.id, url, events },
   });

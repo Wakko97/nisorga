@@ -80,4 +80,34 @@ describe("items", () => {
     const res = await request(app).get("/items");
     expect(res.status).toBe(401);
   });
+
+  it("sets waitingSince immediately when an item is created with status=WAITING", async () => {
+    const res = await request(app)
+      .post("/items")
+      .set("Cookie", ownerCookie)
+      .send({ title: "Direkt wartend", status: "WAITING" });
+    expect(res.status).toBe(201);
+    expect(res.body.waitingSince).not.toBeNull();
+  });
+
+  it("leaves waitingSince null when created with a non-WAITING status", async () => {
+    const res = await request(app).post("/items").set("Cookie", ownerCookie).send({ title: "Neue Idee" });
+    expect(res.body.waitingSince).toBeNull();
+  });
+
+  it("rejects an invalid `type` query filter with 400 instead of crashing", async () => {
+    const res = await request(app).get("/items?type=bogus").set("Cookie", ownerCookie);
+    expect(res.status).toBe(400);
+  });
+
+  it("rejects an invalid `status` query filter with 400 instead of crashing", async () => {
+    const res = await request(app).get("/items?status=bogus").set("Cookie", ownerCookie);
+    expect(res.status).toBe(400);
+  });
+
+  it("accepts valid type/status query filters", async () => {
+    await request(app).post("/items").set("Cookie", ownerCookie).send({ title: "Idee", type: "IDEA" });
+    const res = await request(app).get("/items?type=IDEA&status=INBOX").set("Cookie", ownerCookie);
+    expect(res.status).toBe(200);
+  });
 });

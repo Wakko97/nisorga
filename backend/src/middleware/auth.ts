@@ -18,13 +18,13 @@ declare global {
   }
 }
 
-const JWT_SECRET = process.env.JWT_SECRET || "dev-secret";
+const JWT_SECRET = process.env.JWT_SECRET;
 
 // Short-lived on purpose: a stolen access token is only useful for a few
 // minutes. Long-lived sessions are carried by the rotating refresh token
 // (see lib/refreshToken.ts and POST /auth/refresh) instead.
 export function signToken(user: AuthUser) {
-  return jwt.sign({ id: user.id }, JWT_SECRET, { expiresIn: "15m" });
+  return jwt.sign({ id: user.id }, JWT_SECRET!, { expiresIn: "15m" });
 }
 
 export async function requireAuth(req: Request, res: Response, next: NextFunction) {
@@ -32,7 +32,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     const token = req.cookies?.token;
     if (!token) return res.status(401).json({ error: "Not authenticated" });
 
-    const payload = jwt.verify(token, JWT_SECRET) as { id: string };
+    const payload = jwt.verify(token, JWT_SECRET!) as { id: string };
     const user = await prisma.user.findUnique({ where: { id: payload.id } });
     if (!user) return res.status(401).json({ error: "Not authenticated" });
 

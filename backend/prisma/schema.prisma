@@ -31,6 +31,15 @@ enum ItemSource {
   VOICE
 }
 
+// Singleton row (id is always 1) tracking whether the setup wizard has run.
+// Self-registration (POST /auth/register) is locked until this is true;
+// POST /setup/init flips it atomically, which also structurally eliminates
+// the old "first registered user becomes OWNER" race condition.
+model AppState {
+  id          Int     @id @default(1)
+  initialized Boolean @default(false)
+}
+
 model User {
   id                    String    @id @default(uuid())
   email                 String    @unique

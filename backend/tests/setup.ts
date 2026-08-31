@@ -17,4 +17,13 @@ beforeEach(async () => {
   await prisma.googleAccount.deleteMany();
   await prisma.refreshToken.deleteMany();
   await prisma.user.deleteMany();
+
+  // Most tests exercise the app as if the setup wizard already ran (self
+  // registration open). Tests covering the wizard itself explicitly flip
+  // this back to false.
+  await prisma.appState.upsert({
+    where: { id: 1 },
+    update: { initialized: true },
+    create: { id: 1, initialized: true },
+  });
 });

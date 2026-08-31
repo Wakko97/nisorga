@@ -37,7 +37,26 @@ export async function rotateRefreshToken(presentedToken: string): Promise<Rotate
   const existing = await prisma.refreshToken.findUnique({ where: { tokenHash } });
   if (!existing) return { ok: false, reason: "invalid" };
 
-  if (existing.revokedAt) {
+  if (existing.expiresAt.getTime() < Date.now()) {
+    await prisma.refreshToken.updateMany({
+      where: { id: existing.id, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+    return { ok: false, reason: "expired" };
+  }
+
+  // Conditional update: only succeeds if this token was still unrevoked at
+  // the moment we claim it. If two requests race to rotate the same token
+  // (e.g. concurrent /auth/refresh calls, or a stolen+replayed token),
+  // exactly one wins this update; the loser falls into the count===0 branch
+  // below and is treated as reuse/theft — revoking every outstanding
+  // refresh token for the user so both sessions are forced to re-authenticate.
+  const claimed = await prisma.refreshToken.updateMany({
+    where: { id: existing.id, revokedAt: null },
+    data: { revokedAt: new Date() },
+  });
+
+  if (claimed.count === 0) {
     await prisma.refreshToken.updateMany({
       where: { userId: existing.userId, revokedAt: null },
       data: { revokedAt: new Date() },
@@ -45,12 +64,6 @@ export async function rotateRefreshToken(presentedToken: string): Promise<Rotate
     return { ok: false, reason: "reused" };
   }
 
-  if (existing.expiresAt.getTime() < Date.now()) {
-    await prisma.refreshToken.update({ where: { id: existing.id }, data: { revokedAt: new Date() } });
-    return { ok: false, reason: "expired" };
-  }
-
-  await prisma.refreshToken.update({ where: { id: existing.id }, data: { revokedAt: new Date() } });
   const nextToken = await issueRefreshToken(existing.userId);
   return { ok: true, userId: existing.userId, token: nextToken };
 }

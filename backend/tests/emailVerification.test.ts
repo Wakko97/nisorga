@@ -40,4 +40,18 @@ describe("email verification", () => {
     const res = await request(app).post("/auth/resend-verification").set("Cookie", cookies);
     expect(res.status).toBe(200);
   });
+
+  it("rate-limits resend-verification to 3 per hour per user", async () => {
+    const registerRes = await request(app)
+      .post("/auth/register")
+      .send({ email: "owner@test.com", password: "password123", name: "Owner" });
+    const cookies = registerRes.headers["set-cookie"];
+
+    let lastStatus = 0;
+    for (let i = 0; i < 4; i++) {
+      const res = await request(app).post("/auth/resend-verification").set("Cookie", cookies);
+      lastStatus = res.status;
+    }
+    expect(lastStatus).toBe(429);
+  });
 });

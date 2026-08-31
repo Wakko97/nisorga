@@ -4,8 +4,9 @@ import crypto from "crypto";
 import rateLimit from "express-rate-limit";
 import { prisma } from "../lib/prisma";
 import { signToken, requireAuth } from "../middleware/auth";
-import { issueRefreshToken, rotateRefreshToken, revokeRefreshToken } from "../lib/refreshToken";
+import { rotateRefreshToken, revokeRefreshToken } from "../lib/refreshToken";
 import { sendEmail } from "../lib/sendgrid";
+import { issueSessionCookies, clearSessionCookies, ACCESS_COOKIE_OPTS, REFRESH_COOKIE_OPTS } from "../lib/session";
 
 const router = Router();
 
@@ -21,42 +22,19 @@ const loginRateLimit = rateLimit({
   message: { error: "Too many login attempts, please try again later." },
 });
 
-const ACCESS_COOKIE_OPTS = {
-  httpOnly: true,
-  sameSite: "lax" as const,
-  secure: process.env.NODE_ENV === "production",
-  maxAge: 15 * 60 * 1000,
-};
-
-// Scoped to /auth (not just /auth/refresh) so it's still sent on /auth/logout,
-// which needs it to revoke the token server-side.
-const REFRESH_COOKIE_OPTS = {
-  httpOnly: true,
-  sameSite: "lax" as const,
-  secure: process.env.NODE_ENV === "production",
-  path: "/auth",
-  maxAge: 30 * 24 * 60 * 60 * 1000,
-};
+// Prevents abusing resend-verification as an email bomb / spam vector.
+// Keyed by the authenticated user's id (route is behind requireAuth).
+const resendVerificationRateLimit = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: 3,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => req.user!.id,
+  message: { error: "Too many verification emails requested, please try again later." },
+});
 
 const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173";
 const EMAIL_VERIFY_TTL_MS = 24 * 60 * 60 * 1000;
-
-async function issueSessionCookies(res: import("express").Response, user: { id: string; email: string; name: string; role: "OWNER" | "MEMBER" }) {
-  const accessToken = signToken(user);
-  const refreshToken = await issueRefreshToken(user.id);
-  res.cookie("token", accessToken, ACCESS_COOKIE_OPTS);
-  res.cookie("refreshToken", refreshToken, REFRESH_COOKIE_OPTS);
-}
-
-// res.clearCookie forwards every cookie option (including maxAge) to
-// Set-Cookie, which Express deprecated — it now always clears immediately
-// regardless of maxAge. Strip it so no deprecation warning is logged.
-function clearSessionCookies(res: import("express").Response) {
-  const { maxAge: _access, ...accessOpts } = ACCESS_COOKIE_OPTS;
-  const { maxAge: _refresh, ...refreshOpts } = REFRESH_COOKIE_OPTS;
-  res.clearCookie("token", accessOpts);
-  res.clearCookie("refreshToken", refreshOpts);
-}
 
 async function sendVerificationEmail(user: { id: string; email: string; name: string }) {
   const verifyToken = crypto.randomUUID();
@@ -81,15 +59,20 @@ router.post("/register", async (req, res) => {
     return res.status(400).json({ error: "password must be at least 8 characters" });
   }
 
+  // Self-registration only opens once the setup wizard has created the
+  // OWNER account (see routes/setup.ts). This also removes the old
+  // "first registered user becomes OWNER" race.
+  const appState = await prisma.appState.findUnique({ where: { id: 1 } });
+  if (!appState?.initialized) {
+    return res.status(403).json({ error: "Setup not completed" });
+  }
+
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) return res.status(409).json({ error: "Email already registered" });
 
-  const userCount = await prisma.user.count();
-  const role = userCount === 0 ? "OWNER" : "MEMBER";
-
   const passwordHash = await bcrypt.hash(password, 10);
   const user = await prisma.user.create({
-    data: { email, passwordHash, name, role, emailInboundToken: crypto.randomUUID() },
+    data: { email, passwordHash, name, role: "MEMBER", emailInboundToken: crypto.randomUUID() },
   });
 
   await issueSessionCookies(res, user);
@@ -149,7 +132,7 @@ router.get("/me", requireAuth, async (req, res) => {
     where: { id: req.user!.id },
     select: { id: true, email: true, name: true, role: true, emailVerified: true },
   });
-  res.json(user);
+  res.json({ ...user, waitingReminderDays: Number(process.env.WAITING_REMINDER_DAYS || 3) });
 });
 
 router.post("/verify-email", async (req, res) => {
@@ -168,7 +151,7 @@ router.post("/verify-email", async (req, res) => {
   res.json({ ok: true });
 });
 
-router.post("/resend-verification", requireAuth, async (req, res) => {
+router.post("/resend-verification", requireAuth, resendVerificationRateLimit, async (req, res) => {
   const user = await prisma.user.findUnique({ where: { id: req.user!.id } });
   if (!user) return res.status(404).json({ error: "User not found" });
   if (user.emailVerified) return res.status(400).json({ error: "Email already verified" });

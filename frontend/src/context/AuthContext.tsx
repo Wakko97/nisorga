@@ -1,7 +1,7 @@
 import { createContext, useContext, ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "../lib/api";
-import { User } from "../lib/types";
+import { User, SetupStatus } from "../lib/types";
 
 interface AuthContextValue {
   user: User | null | undefined;
@@ -36,6 +36,15 @@ export function useAuth() {
   const ctx = useContext(AuthContext);
   if (!ctx) throw new Error("useAuth must be used within AuthProvider");
   return ctx;
+}
+
+export function useSetupStatus() {
+  return useQuery<SetupStatus>({
+    queryKey: ["setup-status"],
+    queryFn: () => api.get<SetupStatus>("/setup/status"),
+    staleTime: Infinity,
+    retry: false,
+  });
 }
 
 export function useLogout() {

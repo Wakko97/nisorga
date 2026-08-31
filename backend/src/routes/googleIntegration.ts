@@ -1,8 +1,15 @@
 import { Router } from "express";
 import { prisma } from "../lib/prisma";
 import { requireAuth } from "../middleware/auth";
-import { createOAuthClient, getAuthorizedClientForUser, GOOGLE_SCOPES } from "../lib/google";
+import {
+  createOAuthClient,
+  getAuthorizedClientForUser,
+  GOOGLE_SCOPES,
+  signOAuthState,
+  verifyOAuthState,
+} from "../lib/google";
 import { encrypt } from "../lib/crypto";
+import { findItemForUser } from "../lib/itemAuthorization";
 import { google } from "googleapis";
 
 const router = Router();
@@ -14,17 +21,28 @@ router.get("/auth-url", (req, res) => {
     access_type: "offline",
     prompt: "consent",
     scope: GOOGLE_SCOPES,
-    state: req.user!.id,
+    state: signOAuthState(req.user!.id),
   });
   res.json({ url });
 });
 
 // Note: Google redirects the browser here directly, so this route cannot go
 // through requireAuth (no cookie context guaranteed cross-site); we use the
-// `state` param (set to the user id above) to know who is completing the flow.
+// signed `state` param (see lib/google.ts) to know who is completing the
+// flow — it's a short-lived JWT, not a raw user id, so it can't be forged
+// or replayed against another account (state CSRF).
 router.get("/callback", async (req, res) => {
   const { code, state } = req.query;
+  const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
   if (!code || !state) return res.status(400).send("Missing code or state");
+
+  let userId: string;
+  try {
+    userId = verifyOAuthState(String(state)).uid;
+  } catch (err) {
+    console.error("Google OAuth state verification failed:", err);
+    return res.redirect(`${frontendUrl}/settings?google=error`);
+  }
 
   try {
     const client = createOAuthClient();
@@ -32,12 +50,12 @@ router.get("/callback", async (req, res) => {
 
     // Google only returns a refresh_token on the first consent; on
     // reconnection we must keep the previously stored (encrypted) one.
-    const existing = await prisma.googleAccount.findUnique({ where: { userId: String(state) } });
+    const existing = await prisma.googleAccount.findUnique({ where: { userId } });
 
     await prisma.googleAccount.upsert({
-      where: { userId: String(state) },
+      where: { userId },
       create: {
-        userId: String(state),
+        userId,
         accessToken: encrypt(tokens.access_token ?? ""),
         refreshToken: encrypt(tokens.refresh_token ?? ""),
         expiryDate: tokens.expiry_date ? new Date(tokens.expiry_date) : null,
@@ -49,11 +67,9 @@ router.get("/callback", async (req, res) => {
       },
     });
 
-    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
     res.redirect(`${frontendUrl}/settings?google=connected`);
   } catch (err) {
     console.error("Google OAuth callback error:", err);
-    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
     res.redirect(`${frontendUrl}/settings?google=error`);
   }
 });
@@ -65,8 +81,9 @@ router.get("/status", async (req, res) => {
 
 router.post("/sync/:itemId", async (req, res) => {
   const user = req.user!;
-  const item = await prisma.item.findUnique({ where: { id: req.params.itemId } });
-  if (!item) return res.status(404).json({ error: "Item not found" });
+  const item = await findItemForUser(req.params.itemId, user);
+  if (item === null) return res.status(404).json({ error: "Item not found" });
+  if (item === "forbidden") return res.status(403).json({ error: "Forbidden" });
   if (!item.dueDate) return res.status(400).json({ error: "Item has no dueDate to sync" });
 
   const client = await getAuthorizedClientForUser(user.id);

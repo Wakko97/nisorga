@@ -47,6 +47,7 @@ router.post("/items", async (req, res) => {
       important: !!important,
       urgent: !!urgent,
       dueDate: dueDate ? new Date(dueDate) : null,
+      waitingSince: status === "WAITING" ? new Date() : null,
       createdById: user.id,
     },
   });
