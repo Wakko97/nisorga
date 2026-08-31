@@ -5,6 +5,7 @@ import Setup from "./pages/Setup";
 import Inbox from "./pages/Inbox";
 import Matrix from "./pages/Matrix";
 import Tasks from "./pages/Tasks";
+import Dashboard from "./pages/Dashboard";
 import ItemDetail from "./pages/ItemDetail";
 import Review from "./pages/Review";
 import Settings from "./pages/Settings";
@@ -47,6 +48,7 @@ export default function App() {
             <Route path="/inbox" element={<Inbox />} />
             <Route path="/matrix" element={<Matrix />} />
             <Route path="/tasks" element={<Tasks />} />
+            <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/review" element={<Review />} />
             <Route path="/items/:id" element={<ItemDetail />} />
             <Route path="/settings" element={<Settings />} />

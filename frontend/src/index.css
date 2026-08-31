@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 body {
-  @apply bg-gray-50 text-gray-900;
+  @apply bg-surface-muted text-gray-900 font-sans antialiased;
 }
 
 /* Respect device notches/home-indicator when the app runs as an installed PWA. */
@@ -12,4 +12,65 @@ body {
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-left: env(safe-area-inset-left, 0px);
   --safe-right: env(safe-area-inset-right, 0px);
+}
+
+@layer components {
+  /* Buttons */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-3.5 py-2 min-h-[44px] text-sm font-medium
+      transition-colors disabled:opacity-50 disabled:pointer-events-none focus-visible:outline-none
+      focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2;
+  }
+  .btn-primary {
+    @apply btn bg-brand-600 text-white hover:bg-brand-700 shadow-sm;
+  }
+  .btn-secondary {
+    @apply btn bg-white text-gray-700 border border-gray-200 hover:bg-gray-50;
+  }
+  .btn-ghost {
+    @apply btn text-gray-600 hover:bg-gray-100;
+  }
+  .btn-danger {
+    @apply btn bg-red-600 text-white hover:bg-red-700;
+  }
+
+  /* Surfaces */
+  .card {
+    @apply bg-white border border-gray-100 rounded-xl shadow-card;
+  }
+  .panel {
+    @apply card p-4 sm:p-5;
+  }
+
+  /* Form controls */
+  .input {
+    @apply w-full rounded-lg border border-gray-200 bg-white px-3 py-2 min-h-[44px] text-sm text-gray-900
+      placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:border-transparent;
+  }
+  .select {
+    @apply input pr-8 appearance-none bg-no-repeat;
+  }
+  .label {
+    @apply block text-xs font-medium text-gray-500 mb-1;
+  }
+
+  /* Badges / tags */
+  .badge {
+    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium;
+  }
+  .badge-neutral {
+    @apply badge bg-gray-100 text-gray-700;
+  }
+  .badge-brand {
+    @apply badge bg-brand-100 text-brand-700;
+  }
+  .badge-warn {
+    @apply badge bg-amber-100 text-amber-800;
+  }
+  .badge-danger {
+    @apply badge bg-red-100 text-red-700;
+  }
+  .badge-success {
+    @apply badge bg-emerald-100 text-emerald-700;
+  }
 }

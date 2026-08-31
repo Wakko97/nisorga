@@ -4,6 +4,7 @@ const items = [
   { to: "/inbox", label: "Inbox", icon: "📥" },
   { to: "/matrix", label: "Matrix", icon: "🧭" },
   { to: "/tasks", label: "Aufgaben", icon: "✅" },
+  { to: "/dashboard", label: "Dashboard", icon: "📊" },
   { to: "/review", label: "Rückblick", icon: "📆" },
   { to: "/settings", label: "Mehr", icon: "⚙️" },
 ];
@@ -15,7 +16,7 @@ const items = [
 export default function BottomNav() {
   return (
     <nav
-      className="md:hidden fixed bottom-0 inset-x-0 z-20 bg-white border-t flex"
+      className="md:hidden fixed bottom-0 inset-x-0 z-20 bg-white/95 backdrop-blur border-t border-gray-100 flex"
       style={{ paddingBottom: "var(--safe-bottom)" }}
       aria-label="Hauptnavigation"
     >
@@ -24,8 +25,8 @@ export default function BottomNav() {
           key={item.to}
           to={item.to}
           className={({ isActive }) =>
-            `flex-1 flex flex-col items-center justify-center gap-0.5 py-2 min-h-[56px] text-xs ${
-              isActive ? "text-gray-900 font-semibold" : "text-gray-500"
+            `flex-1 flex flex-col items-center justify-center gap-0.5 py-2 min-h-[56px] text-[11px] transition-colors ${
+              isActive ? "text-brand-600 font-semibold" : "text-gray-500"
             }`
           }
         >
