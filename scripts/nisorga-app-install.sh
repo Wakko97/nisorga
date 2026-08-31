@@ -77,13 +77,41 @@ install_docker() {
     systemctl enable --now docker
 }
 
+prepare_compose_env_files() {
+    if [[ ! -f .env && -f .env.example ]]; then
+        log INFO "Creating .env from .env.example (generating a random Postgres password)"
+        cp .env.example .env
+        sed -i "s/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=$(openssl rand -hex 16)/" .env
+    fi
+
+    if [[ ! -f backend/.env && -f backend/.env.example ]]; then
+        log INFO "Creating backend/.env from backend/.env.example (generating random secrets)"
+        cp backend/.env.example backend/.env
+
+        local pg_user pg_pass pg_db
+        pg_user="$(grep -oP '^POSTGRES_USER=\K.*' .env 2>/dev/null || echo nisorga)"
+        pg_pass="$(grep -oP '^POSTGRES_PASSWORD=\K.*' .env 2>/dev/null || echo change-me)"
+        pg_db="$(grep -oP '^POSTGRES_DB=\K.*' .env 2>/dev/null || echo nisorga)"
+
+        # docker-compose runs the backend against the "postgres" service, not localhost.
+        sed -i "s#^DATABASE_URL=.*#DATABASE_URL=\"postgresql://${pg_user}:${pg_pass}@postgres:5432/${pg_db}?schema=public\"#" backend/.env
+        sed -i "s#^JWT_SECRET=.*#JWT_SECRET=\"$(openssl rand -hex 32)\"#" backend/.env
+        sed -i "s#^GOOGLE_TOKEN_ENCRYPTION_KEY=.*#GOOGLE_TOKEN_ENCRYPTION_KEY=\"$(openssl rand -hex 32)\"#" backend/.env
+        sed -i "s#^EMAIL_INBOUND_SECRET=.*#EMAIL_INBOUND_SECRET=\"$(openssl rand -hex 16)\"#" backend/.env
+
+        log WARN "backend/.env was created with generated secrets. Google Calendar and SendGrid are left unconfigured (GOOGLE_CLIENT_ID/SECRET, SENDGRID_API_KEY) - fill them in manually if needed, then 'docker compose restart backend'."
+    fi
+}
+
 setup_docker_compose() {
     log INFO "Detected Docker Compose project."
     install_docker
+    prepare_compose_env_files
     log INFO "Starting application with 'docker compose up -d --build'"
     docker compose up -d --build
     systemctl enable docker >/dev/null 2>&1 || true
     log OK "Nisorga is running via Docker Compose. Check status with: docker compose -f $INSTALL_DIR/docker-compose.yml ps"
+    log WARN "No host port is published by default (see docker-compose.yml, service 'frontend') - the app is reachable only from inside the container/network until a reverse proxy or a 'ports:' mapping is added."
 }
 
 setup_nodejs() {
