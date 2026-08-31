@@ -63,10 +63,15 @@ router.get("/webhooks", async (req, res) => {
   res.json(hooks);
 });
 
+const VALID_WEBHOOK_FORMATS = ["GENERIC", "SLACK"];
+
 router.post("/webhooks", async (req, res) => {
-  const { url, events } = req.body ?? {};
+  const { url, events, format } = req.body ?? {};
   if (!url || !Array.isArray(events) || events.length === 0) {
     return res.status(400).json({ error: "url and non-empty events[] are required" });
+  }
+  if (format !== undefined && !VALID_WEBHOOK_FORMATS.includes(format)) {
+    return res.status(400).json({ error: "Invalid format" });
   }
 
   try {
@@ -76,7 +81,7 @@ router.post("/webhooks", async (req, res) => {
   }
 
   const hook = await prisma.webhookSubscription.create({
-    data: { userId: req.user!.id, url, events },
+    data: { userId: req.user!.id, url, events, format: format ?? "GENERIC" },
   });
   res.status(201).json(hook);
 });

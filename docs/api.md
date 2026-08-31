@@ -66,13 +66,23 @@ Unter **Einstellungen → Webhooks** (App-UI, Session-Auth) können Ziel-URLs ab
 - `item.created`
 - `item.updated`
 
-**Payload**
+Jede Subscription hat ein `format`, `GENERIC` (Default) oder `SLACK`.
+
+**Payload (`format: "GENERIC"`)**
 
 ```json
 {
   "event": "item.created",
   "item": { "...": "..." }
 }
+```
+
+**Payload (`format: "SLACK"`)**
+
+Für Slack- oder Microsoft-Teams-Incoming-Webhooks, die ein `{"text": "..."}`-Payload erwarten:
+
+```json
+{ "text": "*item.created*: Rechnung prüfen" }
 ```
 
 Die Zustellung erfolgt asynchron ("fire-and-forget"): ein Fehler oder Timeout beim Empfänger blockiert keine App-Anfragen und wird nur serverseitig geloggt. Es gibt aktuell keine automatischen Retries — der Empfänger sollte idempotent mit Wiederholungen umgehen können, falls später Retries ergänzt werden.

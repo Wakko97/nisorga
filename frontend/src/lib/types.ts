@@ -75,9 +75,12 @@ export interface ApiKeyInfo {
   key?: string;
 }
 
+export type WebhookFormat = "GENERIC" | "SLACK";
+
 export interface WebhookSubscription {
   id: string;
   url: string;
   events: string[];
+  format: WebhookFormat;
   createdAt: string;
 }

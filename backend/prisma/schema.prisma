@@ -160,11 +160,19 @@ model ApiKey {
   lastUsedAt DateTime?
 }
 
+enum WebhookFormat {
+  GENERIC
+  SLACK
+}
+
 model WebhookSubscription {
-  id        String   @id @default(uuid())
+  id        String        @id @default(uuid())
   userId    String
-  user      User     @relation(fields: [userId], references: [id])
+  user      User          @relation(fields: [userId], references: [id])
   url       String
   events    String[]
-  createdAt DateTime @default(now())
+  // GENERIC posts {event, item} as-is; SLACK posts a Slack-compatible
+  // {text} payload so the URL can be a Slack/Teams incoming webhook.
+  format    WebhookFormat @default(GENERIC)
+  createdAt DateTime      @default(now())
 }

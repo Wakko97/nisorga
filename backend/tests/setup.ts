@@ -11,6 +11,8 @@ process.env.GOOGLE_TOKEN_ENCRYPTION_KEY =
 // Truncate all app tables between tests so each test starts from a clean slate.
 beforeEach(async () => {
   await prisma.comment.deleteMany();
+  await prisma.itemTag.deleteMany();
+  await prisma.tag.deleteMany();
   await prisma.item.deleteMany();
   await prisma.webhookSubscription.deleteMany();
   await prisma.apiKey.deleteMany();

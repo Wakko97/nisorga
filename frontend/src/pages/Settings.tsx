@@ -49,12 +49,15 @@ export default function Settings() {
   });
   const [webhookUrl, setWebhookUrl] = useState("");
   const [webhookEvents, setWebhookEvents] = useState<string[]>([]);
+  const [webhookFormat, setWebhookFormat] = useState<"GENERIC" | "SLACK">("GENERIC");
 
   const createWebhook = useMutation({
-    mutationFn: () => api.post("/settings/webhooks", { url: webhookUrl, events: webhookEvents }),
+    mutationFn: () =>
+      api.post("/settings/webhooks", { url: webhookUrl, events: webhookEvents, format: webhookFormat }),
     onSuccess: () => {
       setWebhookUrl("");
       setWebhookEvents([]);
+      setWebhookFormat("GENERIC");
       queryClient.invalidateQueries({ queryKey: ["webhooks"] });
     },
   });
@@ -183,7 +186,7 @@ export default function Settings() {
             Erzeugen
           </button>
         </div>
-        <div className="flex gap-3 mb-3 text-sm">
+        <div className="flex flex-wrap items-center gap-3 mb-3 text-sm">
           {EVENT_OPTIONS.map((ev) => (
             <label key={ev} className="flex items-center gap-1">
               <input
@@ -198,12 +201,28 @@ export default function Settings() {
               {ev}
             </label>
           ))}
+          <label className="flex items-center gap-1 ml-auto">
+            Format
+            <select
+              value={webhookFormat}
+              onChange={(e) => setWebhookFormat(e.target.value as "GENERIC" | "SLACK")}
+              className="select w-auto text-sm py-1 min-h-0"
+            >
+              <option value="GENERIC">Generisch (JSON)</option>
+              <option value="SLACK">Slack / Teams</option>
+            </select>
+          </label>
         </div>
+        <p className="text-xs text-gray-500 mb-3">
+          „Slack / Teams" sendet eine kurze Textnachricht statt des vollständigen Item-JSON — passend für
+          Slack- oder Microsoft-Teams-Incoming-Webhooks.
+        </p>
         <ul className="space-y-1 text-sm">
           {webhooks?.map((w) => (
             <li key={w.id} className="flex items-center justify-between border-t border-gray-100 py-2">
               <span>
-                {w.url} — {w.events.join(", ")}
+                {w.url} — {w.events.join(", ")}{" "}
+                <span className="badge-neutral">{w.format === "SLACK" ? "Slack/Teams" : "Generisch"}</span>
               </span>
               <button onClick={() => deleteWebhook.mutate(w.id)} className="text-red-600 text-xs">
                 Löschen
