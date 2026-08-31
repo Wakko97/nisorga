@@ -1,6 +1,9 @@
 import { prisma, publicUserSelect } from "../lib/prisma";
 import { sendEmail } from "../lib/mailer";
+import { sendPushToUser } from "../lib/push";
 import { getWaitingReminderDays } from "../lib/appConfig";
+
+const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173";
 
 /**
  * Finds all items stuck in WAITING (delegated, awaiting a reply) for longer
@@ -34,9 +37,11 @@ export async function runReminderCheck() {
       <p>Der Punkt <strong>${item.title}</strong> wartet seit ${days} Tagen auf eine Rückmeldung.</p>
       <p>${item.description ?? ""}</p>
     `;
+    const pushBody = `wartet seit ${days} Tagen auf eine Rückmeldung`;
 
-    for (const email of recipients.values()) {
+    for (const [userId, email] of recipients) {
       await sendEmail(email, subject, html);
+      await sendPushToUser(userId, { title: item.title, body: pushBody, url: `${FRONTEND_URL}/items/${item.id}` });
     }
   }
 

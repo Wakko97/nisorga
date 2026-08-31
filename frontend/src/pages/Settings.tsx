@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, downloadFile } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
+import { usePushNotifications } from "../hooks/usePushNotifications";
 import { ApiKeyInfo, WebhookSubscription, MailSettings, AppSettings } from "../lib/types";
 
 const EVENT_OPTIONS = ["item.created", "item.updated"];
@@ -52,6 +53,7 @@ export default function Settings() {
   const { user } = useAuth();
   const isOwner = user?.role === "OWNER";
   const [exportError, setExportError] = useState<string | null>(null);
+  const push = usePushNotifications();
 
   const { data: googleStatus } = useQuery<{ connected: boolean }>({
     queryKey: ["google-status"],
@@ -225,6 +227,29 @@ export default function Settings() {
         >
           {googleStatus?.connected ? "Neu verbinden" : "Google Kalender verbinden"}
         </button>
+      </section>
+
+      <section className="bg-white border rounded-lg p-4">
+        <h2 className="font-semibold mb-2">Push-Benachrichtigungen</h2>
+        {push.state === "unsupported" && (
+          <p className="text-sm text-gray-500">Dein Browser unterstützt keine Push-Benachrichtigungen.</p>
+        )}
+        {push.state === "loading" && <p className="text-sm text-gray-500">Lädt…</p>}
+        {(push.state === "subscribed" || push.state === "unsubscribed") && (
+          <>
+            <p className="text-sm mb-3">
+              Erhalte Delegations-Erinnerungen (überfällige „Wartet auf Rückmeldung"-Punkte) zusätzlich zur E-Mail
+              als Browser-Benachrichtigung auf diesem Gerät.
+            </p>
+            <button
+              onClick={() => (push.state === "subscribed" ? push.unsubscribe() : push.subscribe())}
+              className="text-sm px-3 py-1.5 rounded bg-gray-900 text-white"
+            >
+              {push.state === "subscribed" ? "Auf diesem Gerät deaktivieren" : "Aktivieren"}
+            </button>
+            {push.error && <p className="text-red-600 text-xs mt-2">{push.error}</p>}
+          </>
+        )}
       </section>
 
       <section className="bg-white border rounded-lg p-4">

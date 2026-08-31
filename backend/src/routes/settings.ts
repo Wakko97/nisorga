@@ -6,6 +6,7 @@ import { generateApiKey } from "../lib/apiKey";
 import { assertPublicHttpUrl } from "../lib/ssrfGuard";
 import { getEmailInboundDomain } from "../lib/mailConfig";
 import { encrypt } from "../lib/crypto";
+import { getVapidPublicKey } from "../lib/push";
 
 const router = Router();
 router.use(requireAuth);
@@ -14,6 +15,43 @@ async function inboundAddress(token: string) {
   const domain = await getEmailInboundDomain();
   return `inbox+${token}@${domain}`;
 }
+
+// Web push subscriptions - per user, one row per browser/device.
+router.get("/push/public-key", (req, res) => {
+  res.json({ publicKey: getVapidPublicKey() });
+});
+
+router.post("/push/subscribe", async (req, res) => {
+  const { endpoint, keys } = req.body ?? {};
+  if (!endpoint || !keys?.p256dh || !keys?.auth) {
+    return res.status(400).json({ error: "endpoint and keys.{p256dh,auth} are required" });
+  }
+
+  // Upsert on endpoint (unique): re-subscribing the same browser just
+  // refreshes the row rather than erroring or duplicating it, and also
+  // reassigns it if the subscribing user changed (e.g. logout/login as
+  // someone else on the same device).
+  await prisma.pushSubscription.upsert({
+    where: { endpoint },
+    create: { userId: req.user!.id, endpoint, p256dh: keys.p256dh, auth: keys.auth },
+    update: { userId: req.user!.id, p256dh: keys.p256dh, auth: keys.auth },
+  });
+  res.status(201).json({ ok: true });
+});
+
+router.delete("/push/subscribe", async (req, res) => {
+  const endpoint = String(req.body?.endpoint ?? req.query.endpoint ?? "");
+  if (!endpoint) return res.status(400).json({ error: "endpoint is required" });
+
+  const sub = await prisma.pushSubscription.findUnique({ where: { endpoint } });
+  // Not found, or found but belongs to someone else: either way there is
+  // nothing this user is allowed to delete, but unsubscribing an already-
+  // gone subscription is not an error from the client's point of view.
+  if (!sub || sub.userId !== req.user!.id) return res.json({ ok: true });
+
+  await prisma.pushSubscription.delete({ where: { endpoint } });
+  res.json({ ok: true });
+});
 
 // Email inbound capture
 router.get("/email", async (req, res) => {

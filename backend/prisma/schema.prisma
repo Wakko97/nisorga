@@ -92,6 +92,21 @@ model User {
   apiKeys         ApiKey[]
   webhooks        WebhookSubscription[]
   refreshTokens   RefreshToken[]
+  pushSubscriptions PushSubscription[]
+}
+
+// A single browser/device's Web Push subscription (PushSubscription.toJSON()
+// from the browser's Push API). A user can have several (one per
+// device/browser they enabled notifications on). endpoint is unique per
+// browser subscription, so upserting on it is idempotent for re-enabling.
+model PushSubscription {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
 }
 
 // Refresh tokens are stored hashed (never plaintext) and rotated on every
