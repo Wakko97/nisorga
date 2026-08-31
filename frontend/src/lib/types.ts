@@ -37,6 +37,15 @@ export interface MailSettings {
   imap: ImapSettings;
 }
 
+export interface AppSettings {
+  google: {
+    clientId: string;
+    redirectUri: string;
+    secretSet: boolean;
+  };
+  waitingReminderDays: number;
+}
+
 export interface SetupStatus {
   initialized: boolean;
   env: {

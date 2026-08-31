@@ -15,8 +15,8 @@ import { google } from "googleapis";
 const router = Router();
 router.use(requireAuth);
 
-router.get("/auth-url", (req, res) => {
-  const client = createOAuthClient();
+router.get("/auth-url", async (req, res) => {
+  const client = await createOAuthClient();
   const url = client.generateAuthUrl({
     access_type: "offline",
     prompt: "consent",
@@ -45,7 +45,7 @@ router.get("/callback", async (req, res) => {
   }
 
   try {
-    const client = createOAuthClient();
+    const client = await createOAuthClient();
     const { tokens } = await client.getToken(String(code));
 
     // Google only returns a refresh_token on the first consent; on

@@ -7,6 +7,7 @@ import { signToken, requireAuth } from "../middleware/auth";
 import { rotateRefreshToken, revokeRefreshToken } from "../lib/refreshToken";
 import { sendEmail } from "../lib/mailer";
 import { issueSessionCookies, clearSessionCookies, ACCESS_COOKIE_OPTS, REFRESH_COOKIE_OPTS } from "../lib/session";
+import { getWaitingReminderDays } from "../lib/appConfig";
 
 const router = Router();
 
@@ -36,12 +37,20 @@ const resendVerificationRateLimit = rateLimit({
 const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173";
 const EMAIL_VERIFY_TTL_MS = 24 * 60 * 60 * 1000;
 
-async function sendVerificationEmail(user: { id: string; email: string; name: string }) {
+// Split in two so the token itself is always persisted before the caller
+// moves on, even when the actual send is fire-and-forget (see /register
+// below): a caller checking the DB right after must never race the write.
+async function issueEmailVerificationToken(userId: string): Promise<string> {
   const verifyToken = crypto.randomUUID();
   await prisma.user.update({
-    where: { id: user.id },
+    where: { id: userId },
     data: { emailVerifyToken: verifyToken, emailVerifyExpiresAt: new Date(Date.now() + EMAIL_VERIFY_TTL_MS) },
   });
+  return verifyToken;
+}
+
+async function sendVerificationEmail(user: { id: string; email: string; name: string }) {
+  const verifyToken = await issueEmailVerificationToken(user.id);
   const link = `${FRONTEND_URL}/verify-email?token=${verifyToken}`;
   await sendEmail(
     user.email,
@@ -76,7 +85,18 @@ router.post("/register", async (req, res) => {
   });
 
   await issueSessionCookies(res, user);
-  sendVerificationEmail(user).catch((err) => console.error("Failed to send verification email:", err));
+
+  // The token must be persisted before we respond (a client polling right
+  // after registration must never race this write), but actually sending
+  // the email is fire-and-forget so a slow/misconfigured mail server
+  // doesn't delay the response.
+  const verifyToken = await issueEmailVerificationToken(user.id);
+  const link = `${FRONTEND_URL}/verify-email?token=${verifyToken}`;
+  sendEmail(
+    user.email,
+    "Bitte bestätige deine E-Mail-Adresse",
+    `<p>Hallo ${user.name},</p><p>bitte bestätige deine E-Mail-Adresse: <a href="${link}">${link}</a></p><p>Der Link ist 24 Stunden gültig.</p>`
+  ).catch((err) => console.error("Failed to send verification email:", err));
 
   res.status(201).json({ id: user.id, email: user.email, name: user.name, role: user.role, emailVerified: user.emailVerified });
 });
@@ -132,7 +152,7 @@ router.get("/me", requireAuth, async (req, res) => {
     where: { id: req.user!.id },
     select: { id: true, email: true, name: true, role: true, emailVerified: true },
   });
-  res.json({ ...user, waitingReminderDays: Number(process.env.WAITING_REMINDER_DAYS || 3) });
+  res.json({ ...user, waitingReminderDays: await getWaitingReminderDays() });
 });
 
 router.post("/verify-email", async (req, res) => {

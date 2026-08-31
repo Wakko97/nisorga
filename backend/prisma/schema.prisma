@@ -59,6 +59,18 @@ model AppState {
   imapPasswordEnc    String?
   imapMailbox        String?
   emailInboundDomain String?
+
+  // Google OAuth (Owner-managed via Settings, GET/PUT /settings/app).
+  // Falls back to GOOGLE_CLIENT_ID/SECRET/REDIRECT_URI env vars field-by-
+  // field (see lib/google.ts). Secret is AES-256-GCM encrypted like the
+  // mail passwords above.
+  googleClientId        String?
+  googleClientSecretEnc String?
+  googleRedirectUri     String?
+
+  // Delegation reminder threshold in days (Owner-managed via Settings,
+  // GET/PUT /settings/app). Falls back to WAITING_REMINDER_DAYS env var.
+  waitingReminderDays Int?
 }
 
 model User {

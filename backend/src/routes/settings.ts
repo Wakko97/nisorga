@@ -89,6 +89,39 @@ router.put("/mail", requireOwner, async (req, res) => {
   res.json({ ok: true });
 });
 
+// Other app-wide configuration (Google OAuth, delegation reminder
+// threshold) — global, Owner-only. Same DB-first/env-fallback pattern as
+// /settings/mail; see lib/google.ts and lib/appConfig.ts.
+router.get("/app", requireOwner, async (req, res) => {
+  const state = await prisma.appState.findUnique({ where: { id: 1 } });
+  res.json({
+    google: {
+      clientId: state?.googleClientId ?? "",
+      redirectUri: state?.googleRedirectUri ?? "",
+      secretSet: !!state?.googleClientSecretEnc || !!process.env.GOOGLE_CLIENT_SECRET,
+    },
+    waitingReminderDays: state?.waitingReminderDays ?? Number(process.env.WAITING_REMINDER_DAYS || 3),
+  });
+});
+
+router.put("/app", requireOwner, async (req, res) => {
+  const { google, waitingReminderDays } = req.body ?? {};
+  const data: Record<string, string | number | null> = {};
+
+  if (google && typeof google === "object") {
+    if (google.clientId !== undefined) data.googleClientId = google.clientId || null;
+    if (google.redirectUri !== undefined) data.googleRedirectUri = google.redirectUri || null;
+    if (google.clientSecret === "") data.googleClientSecretEnc = null;
+    else if (google.clientSecret) data.googleClientSecretEnc = encrypt(String(google.clientSecret));
+  }
+  if (waitingReminderDays !== undefined) {
+    data.waitingReminderDays = waitingReminderDays === null ? null : Number(waitingReminderDays);
+  }
+
+  await prisma.appState.update({ where: { id: 1 }, data });
+  res.json({ ok: true });
+});
+
 // API keys
 router.get("/api-keys", async (req, res) => {
   const keys = await prisma.apiKey.findMany({

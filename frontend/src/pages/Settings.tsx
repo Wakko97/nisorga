@@ -3,9 +3,17 @@ import { useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
-import { ApiKeyInfo, WebhookSubscription, MailSettings } from "../lib/types";
+import { ApiKeyInfo, WebhookSubscription, MailSettings, AppSettings } from "../lib/types";
 
 const EVENT_OPTIONS = ["item.created", "item.updated"];
+
+interface GoogleForm {
+  clientId: string;
+  redirectUri: string;
+  clientSecret: string;
+}
+
+const EMPTY_GOOGLE_FORM: GoogleForm = { clientId: "", redirectUri: "", clientSecret: "" };
 
 interface SmtpForm {
   host: string;
@@ -151,6 +159,47 @@ export default function Settings() {
       setImapSaved(true);
       setTimeout(() => setImapSaved(false), 2000);
       queryClient.invalidateQueries({ queryKey: ["settings-mail"] });
+    },
+  });
+
+  // App-wide configuration (Google OAuth + delegation reminder threshold)
+  // — Owner only, same pattern as mail settings above.
+  const { data: appSettings } = useQuery<AppSettings>({
+    queryKey: ["settings-app"],
+    queryFn: () => api.get("/settings/app"),
+    enabled: isOwner,
+  });
+
+  const [googleForm, setGoogleForm] = useState<GoogleForm>(EMPTY_GOOGLE_FORM);
+  const [reminderDays, setReminderDays] = useState(3);
+  const [googleSaved, setGoogleSaved] = useState(false);
+  const [reminderSaved, setReminderSaved] = useState(false);
+
+  useEffect(() => {
+    if (!appSettings) return;
+    setGoogleForm({ ...appSettings.google, clientSecret: "" });
+    setReminderDays(appSettings.waitingReminderDays);
+  }, [appSettings]);
+
+  const saveGoogle = useMutation({
+    mutationFn: (form: GoogleForm) => {
+      const { clientSecret, ...rest } = form;
+      return api.put("/settings/app", { google: clientSecret ? { ...rest, clientSecret } : rest });
+    },
+    onSuccess: () => {
+      setGoogleSaved(true);
+      setTimeout(() => setGoogleSaved(false), 2000);
+      queryClient.invalidateQueries({ queryKey: ["settings-app"] });
+    },
+  });
+
+  const saveReminderDays = useMutation({
+    mutationFn: (days: number) => api.put("/settings/app", { waitingReminderDays: days }),
+    onSuccess: () => {
+      setReminderSaved(true);
+      setTimeout(() => setReminderSaved(false), 2000);
+      queryClient.invalidateQueries({ queryKey: ["settings-app"] });
+      queryClient.invalidateQueries({ queryKey: ["me"] });
     },
   });
 
@@ -327,6 +376,69 @@ export default function Settings() {
             className="text-sm px-3 py-1.5 rounded bg-gray-900 text-white"
           >
             {imapSaved ? "Gespeichert!" : "IMAP speichern"}
+          </button>
+        </section>
+      )}
+
+      {isOwner && (
+        <section className="bg-white border rounded-lg p-4">
+          <h2 className="font-semibold mb-1">App-Konfiguration</h2>
+          <p className="text-xs text-gray-500 mb-4">
+            Gilt für die ganze Instanz. Überschreibt die entsprechenden Umgebungsvariablen, falls dort ebenfalls
+            etwas gesetzt ist.
+          </p>
+
+          <h3 className="text-sm font-medium mb-2">Google-OAuth-Zugangsdaten</h3>
+          <p className="text-xs text-gray-500 mb-2">
+            Aus der Google Cloud Console (siehe README, Abschnitt „Google-Kalender-Integration einrichten").
+          </p>
+          <div className="grid grid-cols-2 gap-2 mb-2">
+            <input
+              value={googleForm.clientId}
+              onChange={(e) => setGoogleForm((f) => ({ ...f, clientId: e.target.value }))}
+              placeholder="Client-ID"
+              className="col-span-2 border rounded px-3 py-2 text-sm"
+            />
+            <input
+              type="password"
+              value={googleForm.clientSecret}
+              onChange={(e) => setGoogleForm((f) => ({ ...f, clientSecret: e.target.value }))}
+              placeholder={appSettings?.google.secretSet ? "•••••• (gesetzt, leer lassen zum Beibehalten)" : "Client-Secret"}
+              className="col-span-2 border rounded px-3 py-2 text-sm"
+            />
+            <input
+              value={googleForm.redirectUri}
+              onChange={(e) => setGoogleForm((f) => ({ ...f, redirectUri: e.target.value }))}
+              placeholder="Redirect-URI (https://<backend-host>/integrations/google/callback)"
+              className="col-span-2 border rounded px-3 py-2 text-sm"
+            />
+          </div>
+          <button
+            onClick={() => saveGoogle.mutate(googleForm)}
+            className="text-sm px-3 py-1.5 rounded bg-gray-900 text-white mb-6"
+          >
+            {googleSaved ? "Gespeichert!" : "Google-Zugangsdaten speichern"}
+          </button>
+
+          <h3 className="text-sm font-medium mb-2">Delegations-Erinnerung</h3>
+          <div className="flex items-center gap-2 mb-2">
+            <input
+              type="number"
+              min={1}
+              value={reminderDays}
+              onChange={(e) => setReminderDays(Number(e.target.value))}
+              className="w-24 border rounded px-3 py-2 text-sm"
+            />
+            <span className="text-sm text-gray-600">
+              Tage, nach denen ein auf „Wartet auf Rückmeldung" stehender Punkt als überfällig gilt und eine
+              Erinnerung verschickt wird.
+            </span>
+          </div>
+          <button
+            onClick={() => saveReminderDays.mutate(reminderDays)}
+            className="text-sm px-3 py-1.5 rounded bg-gray-900 text-white"
+          >
+            {reminderSaved ? "Gespeichert!" : "Speichern"}
           </button>
         </section>
       )}

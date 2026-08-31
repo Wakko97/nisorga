@@ -24,12 +24,27 @@ export function verifyOAuthState(state: string): { uid: string } {
   return jwt.verify(state, process.env.JWT_SECRET!) as { uid: string };
 }
 
-export function createOAuthClient() {
+/**
+ * Resolves Google OAuth client credentials with the Owner-managed Settings
+ * (AppState, see GET/PUT /settings/app) taking priority over the matching
+ * GOOGLE_* env var, falling back field-by-field - same pattern as
+ * lib/mailConfig.ts.
+ */
+export async function createOAuthClient() {
+  const state = await prisma.appState.findUnique({ where: { id: 1 } });
   return new google.auth.OAuth2(
-    process.env.GOOGLE_CLIENT_ID,
-    process.env.GOOGLE_CLIENT_SECRET,
-    process.env.GOOGLE_REDIRECT_URI
+    state?.googleClientId || process.env.GOOGLE_CLIENT_ID,
+    state?.googleClientSecretEnc ? decrypt(state.googleClientSecretEnc) : process.env.GOOGLE_CLIENT_SECRET,
+    state?.googleRedirectUri || process.env.GOOGLE_REDIRECT_URI
   );
+}
+
+/** Returns true once Google OAuth is configured, via Settings or env vars. */
+export async function isGoogleConfigured(): Promise<boolean> {
+  const state = await prisma.appState.findUnique({ where: { id: 1 } });
+  const clientId = state?.googleClientId || process.env.GOOGLE_CLIENT_ID;
+  const clientSecret = state?.googleClientSecretEnc || process.env.GOOGLE_CLIENT_SECRET;
+  return !!(clientId && clientSecret);
 }
 
 /**
@@ -40,7 +55,7 @@ export async function getAuthorizedClientForUser(userId: string) {
   const account = await prisma.googleAccount.findUnique({ where: { userId } });
   if (!account) return null;
 
-  const client = createOAuthClient();
+  const client = await createOAuthClient();
   client.setCredentials({
     access_token: decrypt(account.accessToken),
     refresh_token: decrypt(account.refreshToken),

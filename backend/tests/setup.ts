@@ -39,6 +39,10 @@ beforeEach(async () => {
       imapPasswordEnc: null,
       imapMailbox: null,
       emailInboundDomain: null,
+      googleClientId: null,
+      googleClientSecretEnc: null,
+      googleRedirectUri: null,
+      waitingReminderDays: null,
     },
     create: { id: 1, initialized: true },
   });

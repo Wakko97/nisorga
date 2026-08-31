@@ -4,6 +4,7 @@ import crypto from "crypto";
 import { prisma } from "../lib/prisma";
 import { issueSessionCookies } from "../lib/session";
 import { getSmtpConfig, getImapConfig } from "../lib/mailConfig";
+import { isGoogleConfigured } from "../lib/google";
 
 const router = Router();
 
@@ -13,12 +14,12 @@ const router = Router();
 // exposed, never the underlying secret values.
 router.get("/status", async (_req, res) => {
   const appState = await prisma.appState.findUnique({ where: { id: 1 } });
-  const [smtp, imap] = await Promise.all([getSmtpConfig(), getImapConfig()]);
+  const [smtp, imap, googleConfigured] = await Promise.all([getSmtpConfig(), getImapConfig(), isGoogleConfigured()]);
   res.json({
     initialized: !!appState?.initialized,
     env: {
       smtpConfigured: !!smtp,
-      googleConfigured: !!(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET),
+      googleConfigured,
       emailInboundConfigured: !!imap,
     },
   });
