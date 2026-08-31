@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useSearchParams } from "react-router-dom";
 import { api } from "../lib/api";
 import { useSpeechRecognition } from "../hooks/useSpeechRecognition";
 import ScanCapture from "./ScanCapture";
@@ -8,6 +9,17 @@ export default function QuickCapture() {
   const [title, setTitle] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // The command palette's "Neue Idee erfassen" navigates here with
+  // ?focus=capture so the input is focused right away, same as pressing "n".
+  useEffect(() => {
+    if (searchParams.get("focus") === "capture") {
+      inputRef.current?.focus();
+      searchParams.delete("focus");
+      setSearchParams(searchParams, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
   const { isSupported, isListening, transcript, start, stop } = useSpeechRecognition();
 
   useEffect(() => {

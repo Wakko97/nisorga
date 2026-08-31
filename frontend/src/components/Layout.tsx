@@ -3,6 +3,7 @@ import { NavLink, Outlet } from "react-router-dom";
 import { useAuth, useLogout } from "../context/AuthContext";
 import { api } from "../lib/api";
 import BottomNav from "./BottomNav";
+import CommandPalette from "./CommandPalette";
 
 const navItems = [
   { to: "/inbox", label: "Inbox" },
@@ -17,6 +18,7 @@ export default function Layout() {
   const { user } = useAuth();
   const logout = useLogout();
   const [resent, setResent] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -63,6 +65,13 @@ export default function Layout() {
             </nav>
           </div>
           <div className="flex items-center gap-3 text-sm text-gray-600 shrink-0">
+            <button
+              onClick={() => setPaletteOpen(true)}
+              className="hidden md:flex items-center gap-1.5 text-xs text-gray-500 border border-gray-200 rounded-lg px-2.5 py-1.5 hover:bg-gray-50"
+              aria-label="Befehlspalette öffnen"
+            >
+              Suchen <span className="badge-neutral">⌘K</span>
+            </button>
             <span className="hidden sm:inline">
               {user?.name}{" "}
               <span className="badge-neutral align-middle">{user?.role === "OWNER" ? "Owner" : "Mitglied"}</span>
@@ -77,6 +86,7 @@ export default function Layout() {
         <Outlet />
       </main>
       <BottomNav />
+      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
     </div>
   );
 }
