@@ -253,7 +253,7 @@ Wichtige Optionen: `--ctid` (Pflicht), `--dest` (Zielverzeichnis auf dem Host), 
 
 ### 5. Automatische Zeitpläne (Update/Backup)
 
-`scripts/nisorga-lxc-schedule.sh` richtet im Container einen systemd-Timer ein, der Update oder Backup regelmäßig automatisch anstößt — ohne Cron-Paket, nur mit Bordmitteln von Debian.
+`scripts/nisorga-lxc-schedule.sh` richtet im Container einen systemd-Timer ein, der Update, Backup oder Healthcheck (siehe [Abschnitt 7](#7-monitoring--health-check)) regelmäßig automatisch anstößt — ohne Cron-Paket, nur mit Bordmitteln von Debian.
 
 ```bash
 # Backup täglich um 02:00, 14 Stück aufbewahren
@@ -266,7 +266,7 @@ sudo ./scripts/nisorga-lxc-schedule.sh --ctid 135 --task update --schedule "Sun 
 sudo ./scripts/nisorga-lxc-schedule.sh --ctid 135 --task backup --disable
 ```
 
-Wichtige Optionen: `--ctid` (Pflicht), `--task update|backup` (Pflicht), `--schedule` (systemd-`OnCalendar`-Ausdruck, siehe `man systemd.time`; Standard: `03:00` für Updates, `02:00` für Backups), `--disable`. Alles nach `--` wird 1:1 an das geplante Skript durchgereicht (z. B. `--branch`, `--keep`).
+Wichtige Optionen: `--ctid` (Pflicht), `--task update|backup|healthcheck` (Pflicht), `--schedule` (systemd-`OnCalendar`-Ausdruck, siehe `man systemd.time`; Standard: `03:00` für Updates, `02:00` für Backups, `*:0/5` (alle 5 Minuten) für Healthchecks), `--disable`. Alles nach `--` wird 1:1 an das geplante Skript durchgereicht (z. B. `--branch`, `--keep`, `--alert-email`).
 
 **Hinweis:** Das automatische Update pullt aus Git und baut/startet per Docker Compose neu — bei laufendem Betrieb kurzzeitig nicht erreichbar, keine Vorab-Prüfung auf Breaking Changes. Für produktive Instanzen ggf. lieber manuell anstoßen (`nisorga-lxc-update.sh`) oder vorher testen.
 
@@ -284,3 +284,15 @@ sudo ./scripts/nisorga-lxc-tls-setup.sh --ctid 135 --disable
 ```
 
 Wichtige Optionen: `--ctid` (Pflicht), `--domain` (Pflicht außer bei `--disable`), `--email` (für Let's-Encrypt-Benachrichtigungen), `--dir`, `--disable`, `--dry-run`. Zertifikatsstatus prüfen: `docker compose -f docker-compose.yml -f docker-compose.tls.yml logs -f caddy` im Container.
+
+### 7. Monitoring / Health-Check
+
+Die Docker-Images von `postgres`, `backend` und `frontend` bringen bereits einen nativen Docker-`HEALTHCHECK` mit (Backend/Frontend pollen `GET /health` bzw. die nginx-Startseite alle 30s). `scripts/nisorga-healthcheck.sh` liest diesen Status über `docker inspect`, versucht bei einem ungesunden Service standardmäßig einen `docker compose restart`, und schickt bei anhaltendem Problem optional eine Alarmierung — per Webhook (z. B. Slack/Discord/ntfy.sh, JSON `{"text": "..."}`) und/oder E-Mail über die in `backend/.env` gesetzten `SMTP_*`-Variablen (die Settings-UI-Mailkonfiguration liegt nur in der DB und ist von diesem reinen Shell-Skript aus nicht erreichbar — für Alarm-Mails also `SMTP_*` zusätzlich in `.env` setzen, auch wenn der eigentliche Mailversand der App über die UI läuft).
+
+Am sinnvollsten als Zeitplan (siehe Abschnitt 5) eingerichtet:
+
+```bash
+sudo ./scripts/nisorga-lxc-schedule.sh --ctid 135 --task healthcheck -- --alert-email du@deine-domain.tld --webhook-url https://hooks.slack.com/services/...
+```
+
+Wichtige Optionen von `nisorga-healthcheck.sh`: `--dir`, `--no-restart` (keinen automatischen Neustart versuchen), `--alert-email`, `--webhook-url`, `--dry-run`. Exit-Code `0` = alles gesund, `1` = mindestens ein Service weiterhin ungesund — auch direkt für externes Monitoring per SSH-Aufruf nutzbar, unabhängig von Alarmierungs-Flags.

@@ -3,17 +3,18 @@
 # nisorga-schedule.sh
 #
 # Installs (or removes) a systemd timer INSIDE the container that runs
-# nisorga-update.sh or nisorga-backup.sh on a recurring schedule, so
-# updates/backups don't have to be triggered by hand every time.
+# nisorga-update.sh, nisorga-backup.sh, or nisorga-healthcheck.sh on a
+# recurring schedule, so they don't have to be triggered by hand every time.
 #
 # Usage:
-#   ./nisorga-schedule.sh --task <update|backup> [options]
-#   ./nisorga-schedule.sh --task <update|backup> --disable
+#   ./nisorga-schedule.sh --task <update|backup|healthcheck> [options]
+#   ./nisorga-schedule.sh --task <update|backup|healthcheck> --disable
 #
 # Options:
-#   --task <update|backup>   Which script to schedule (required)
+#   --task <update|backup|healthcheck>   Which script to schedule (required)
 #   --schedule <expr>          systemd OnCalendar expression (default:
-#                                 "03:00" for update, "02:00" for backup -
+#                                 "03:00" for update, "02:00" for backup,
+#                                 "*:0/5" (every 5 min) for healthcheck -
 #                                 see `man systemd.time`)
 #   --disable                     Remove the timer/service for --task
 #                                    instead of installing it
@@ -68,8 +69,8 @@ while [[ $# -gt 0 ]]; do
     shift
 done
 
-if [[ "$TASK" != "update" && "$TASK" != "backup" ]]; then
-    log ERROR "--task must be 'update' or 'backup'."
+if [[ "$TASK" != "update" && "$TASK" != "backup" && "$TASK" != "healthcheck" ]]; then
+    log ERROR "--task must be 'update', 'backup', or 'healthcheck'."
     print_help
     exit 1
 fi
@@ -91,7 +92,13 @@ if $DISABLE; then
     exit 0
 fi
 
-[[ -n "$SCHEDULE" ]] || SCHEDULE="$([[ "$TASK" == "update" ]] && echo "03:00" || echo "02:00")"
+if [[ -z "$SCHEDULE" ]]; then
+    case "$TASK" in
+        update) SCHEDULE="03:00" ;;
+        backup) SCHEDULE="02:00" ;;
+        healthcheck) SCHEDULE="*:0/5" ;;
+    esac
+fi
 
 target_script="/usr/local/bin/nisorga-${TASK}.sh"
 local_script="$SCRIPT_DIR/nisorga-${TASK}.sh"

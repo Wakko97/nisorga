@@ -3,19 +3,20 @@
 # nisorga-lxc-schedule.sh
 #
 # Run this script IN THE PROXMOX VE SHELL (as root on the Proxmox host) to
-# enable (or disable) a recurring update/backup schedule inside a Nisorga
-# LXC container, without having to `pct enter` it. Pushes
+# enable (or disable) a recurring update/backup/healthcheck schedule inside
+# a Nisorga LXC container, without having to `pct enter` it. Pushes
 # nisorga-schedule.sh into the container and runs it there.
 #
 # Usage:
-#   ./nisorga-lxc-schedule.sh --ctid <id> --task <update|backup> [options]
-#   ./nisorga-lxc-schedule.sh --ctid <id> --task <update|backup> --disable
+#   ./nisorga-lxc-schedule.sh --ctid <id> --task <update|backup|healthcheck> [options]
+#   ./nisorga-lxc-schedule.sh --ctid <id> --task <update|backup|healthcheck> --disable
 #
 # Options:
 #   --ctid <id>               Container ID (required)
-#   --task <update|backup>      Which script to schedule (required)
+#   --task <update|backup|healthcheck>      Which script to schedule (required)
 #   --schedule <expr>              systemd OnCalendar expression (default:
-#                                     "03:00" for update, "02:00" for backup)
+#                                     "03:00" for update, "02:00" for backup,
+#                                     "*:0/5" for healthcheck)
 #   --disable                         Remove the schedule for --task instead
 #                                        of installing it
 #   --dry-run                            Print what would be done without
@@ -70,7 +71,7 @@ fi
 command -v pct >/dev/null 2>&1 || { log ERROR "'pct' not found - this script must run on a Proxmox VE host."; exit 1; }
 
 if [[ -z "$CTID" ]]; then log ERROR "--ctid is required."; print_help; exit 1; fi
-if [[ "$TASK" != "update" && "$TASK" != "backup" ]]; then log ERROR "--task must be 'update' or 'backup'."; print_help; exit 1; fi
+if [[ "$TASK" != "update" && "$TASK" != "backup" && "$TASK" != "healthcheck" ]]; then log ERROR "--task must be 'update', 'backup', or 'healthcheck'."; print_help; exit 1; fi
 if ! pct status "$CTID" >/dev/null 2>&1; then log ERROR "Container $CTID does not exist."; exit 1; fi
 
 if [[ "$(pct status "$CTID")" != "status: running" ]]; then
