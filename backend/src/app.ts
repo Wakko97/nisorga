@@ -18,6 +18,7 @@ import settingsRouter from "./routes/settings";
 import apiV1Router from "./routes/apiV1";
 import reviewRouter from "./routes/review";
 import dashboardRouter from "./routes/dashboard";
+import tagsRouter from "./routes/tags";
 import emailInboundRouter from "./routes/emailInbound";
 import setupRouter from "./routes/setup";
 
@@ -49,6 +50,7 @@ app.use("/settings", settingsRouter);
 app.use("/api/v1", apiV1Router);
 app.use("/review", reviewRouter);
 app.use("/dashboard", dashboardRouter);
+app.use("/tags", tagsRouter);
 app.use("/integrations/email", emailInboundRouter);
 app.use("/setup", setupRouter);
 

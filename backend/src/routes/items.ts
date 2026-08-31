@@ -10,9 +10,15 @@ router.use(requireAuth);
 const VALID_TYPES = ["IDEA", "TASK"];
 const VALID_STATUSES = ["INBOX", "TODO", "IN_PROGRESS", "WAITING", "DONE"];
 
+const itemInclude = {
+  createdBy: { select: publicUserSelect },
+  assignedTo: { select: publicUserSelect },
+  tags: { include: { tag: true } },
+};
+
 router.get("/", async (req, res) => {
   const user = req.user!;
-  const { type, status } = req.query;
+  const { type, status, tagId } = req.query;
 
   if (type !== undefined && !VALID_TYPES.includes(String(type))) {
     return res.status(400).json({ error: "Invalid type" });
@@ -26,8 +32,9 @@ router.get("/", async (req, res) => {
       ...visibilityWhere(user),
       ...(type ? { type: String(type) as any } : {}),
       ...(status ? { status: String(status) as any } : {}),
+      ...(tagId ? { tags: { some: { tagId: String(tagId) } } } : {}),
     },
-    include: { createdBy: { select: publicUserSelect }, assignedTo: { select: publicUserSelect } },
+    include: itemInclude,
     orderBy: { createdAt: "desc" },
   });
   res.json(items);
@@ -224,6 +231,43 @@ router.post("/:id/comments", async (req, res) => {
     include: { author: { select: publicUserSelect } },
   });
   res.status(201).json(comment);
+});
+
+// Tags
+router.post("/:id/tags", async (req, res) => {
+  const user = req.user!;
+  const existing = await findItemForUser(req.params.id, user);
+  if (existing === null) return res.status(404).json({ error: "Not found" });
+  if (existing === "forbidden") return res.status(403).json({ error: "Forbidden" });
+
+  const { tagId } = req.body ?? {};
+  if (!tagId) return res.status(400).json({ error: "tagId is required" });
+
+  const tag = await prisma.tag.findUnique({ where: { id: tagId } });
+  if (!tag) return res.status(404).json({ error: "Tag not found" });
+
+  await prisma.itemTag.upsert({
+    where: { itemId_tagId: { itemId: req.params.id, tagId } },
+    create: { itemId: req.params.id, tagId },
+    update: {},
+  });
+
+  const item = await prisma.item.findUnique({ where: { id: req.params.id }, include: itemInclude });
+  res.status(201).json(item);
+});
+
+router.delete("/:id/tags/:tagId", async (req, res) => {
+  const user = req.user!;
+  const existing = await findItemForUser(req.params.id, user);
+  if (existing === null) return res.status(404).json({ error: "Not found" });
+  if (existing === "forbidden") return res.status(403).json({ error: "Forbidden" });
+
+  await prisma.itemTag
+    .delete({ where: { itemId_tagId: { itemId: req.params.id, tagId: req.params.tagId } } })
+    .catch(() => null);
+
+  const item = await prisma.item.findUnique({ where: { id: req.params.id }, include: itemInclude });
+  res.json(item);
 });
 
 export default router;

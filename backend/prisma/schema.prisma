@@ -96,10 +96,35 @@ model Item {
   // filename — see lib/uploads.ts. Served only via the authenticated
   // GET /items/:id/attachment route, never a static mount.
   attachmentPath String?
+  // RFC 5545-ish recurrence shorthand for recurring tasks, e.g. "DAILY",
+  // "WEEKLY", "MONTHLY". Null means the item does not recur. When a
+  // recurring TASK is marked DONE, a cron job creates the next occurrence
+  // (see backend/src/jobs/recurrence.ts) and clears this item's rule so it
+  // is not re-processed.
+  recurrenceRule String?
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
 
   comments Comment[]
+  tags     ItemTag[]
+}
+
+model Tag {
+  id        String    @id @default(uuid())
+  name      String    @unique
+  color     String    @default("#615ef2")
+  createdAt DateTime  @default(now())
+
+  items ItemTag[]
+}
+
+model ItemTag {
+  itemId String
+  item   Item   @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  tagId  String
+  tag    Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([itemId, tagId])
 }
 
 model Comment {

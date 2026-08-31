@@ -22,6 +22,13 @@ export interface SetupStatus {
   };
 }
 
+export interface Tag {
+  id: string;
+  name: string;
+  color: string;
+  createdAt: string;
+}
+
 export interface Item {
   id: string;
   type: ItemType;
@@ -39,6 +46,8 @@ export interface Item {
   assignedTo?: User | null;
   googleEventId: string | null;
   attachmentPath?: string | null;
+  recurrenceRule?: string | null;
+  tags?: { tag: Tag }[];
   createdAt: string;
   updatedAt: string;
 }

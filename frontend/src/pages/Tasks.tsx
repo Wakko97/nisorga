@@ -2,10 +2,11 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { api } from "../lib/api";
-import { Item, User, ItemStatus } from "../lib/types";
+import { Item, User, ItemStatus, Tag } from "../lib/types";
 import { daysSince, isWaitingOverdue } from "../lib/waiting";
 import { useAuth } from "../context/AuthContext";
 import BulkActionBar from "../components/BulkActionBar";
+import TagBadge from "../components/TagBadge";
 
 const STATUSES: ItemStatus[] = ["TODO", "IN_PROGRESS", "WAITING", "DONE"];
 
@@ -22,6 +23,7 @@ export default function Tasks() {
   const { user } = useAuth();
   const [status, setStatus] = useState<string>("");
   const [assignedTo, setAssignedTo] = useState<string>("");
+  const [tagId, setTagId] = useState<string>("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const { data: items } = useQuery<Item[]>({
@@ -32,10 +34,12 @@ export default function Tasks() {
     queryKey: ["users"],
     queryFn: () => api.get("/users"),
   });
+  const { data: tags } = useQuery<Tag[]>({ queryKey: ["tags"], queryFn: () => api.get("/tags") });
 
   const filtered = (items ?? []).filter((item) => {
     if (status && item.status !== status) return false;
     if (assignedTo && item.assignedToId !== assignedTo) return false;
+    if (tagId && !item.tags?.some(({ tag }) => tag.id === tagId)) return false;
     return true;
   });
 
@@ -85,6 +89,14 @@ export default function Tasks() {
             </option>
           ))}
         </select>
+        <select value={tagId} onChange={(e) => setTagId(e.target.value)} className="select w-auto">
+          <option value="">Alle Tags</option>
+          {tags?.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.name}
+            </option>
+          ))}
+        </select>
       </div>
 
       <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
@@ -122,6 +134,13 @@ export default function Tasks() {
                   <Link to={`/items/${item.id}`} className="hover:text-brand-700 hover:underline block py-1 font-medium">
                     {item.title}
                   </Link>
+                  {item.tags && item.tags.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-0.5">
+                      {item.tags.map(({ tag }) => (
+                        <TagBadge key={tag.id} tag={tag} />
+                      ))}
+                    </div>
+                  )}
                 </td>
                 <td className="p-2.5">
                   <span className="badge-neutral">{item.status}</span>

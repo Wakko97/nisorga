@@ -2,8 +2,9 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, apiFetch, ApiError, fetchAttachmentUrl } from "../lib/api";
-import { Item, User, Comment } from "../lib/types";
+import { Item, User, Comment, Tag } from "../lib/types";
 import { toDatetimeLocalValue, fromDatetimeLocalValue } from "../lib/datetime";
+import TagBadge from "../components/TagBadge";
 
 export default function ItemDetail() {
   const { id } = useParams<{ id: string }>();
@@ -14,6 +15,7 @@ export default function ItemDetail() {
   const [titleDraft, setTitleDraft] = useState("");
   const [descriptionDraft, setDescriptionDraft] = useState("");
   const [attachmentUrl, setAttachmentUrl] = useState<string | null>(null);
+  const [newTagName, setNewTagName] = useState("");
 
   const { data: item, isLoading, isError } = useQuery<Item>({
     queryKey: ["items", id],
@@ -55,6 +57,7 @@ export default function ItemDetail() {
     };
   }, [item?.attachmentPath, id]);
   const { data: users } = useQuery<User[]>({ queryKey: ["users"], queryFn: () => api.get("/users") });
+  const { data: tags } = useQuery<Tag[]>({ queryKey: ["tags"], queryFn: () => api.get("/tags") });
   const { data: comments } = useQuery<Comment[]>({
     queryKey: ["comments", id],
     queryFn: () => api.get(`/items/${id}/comments`),
@@ -93,6 +96,23 @@ export default function ItemDetail() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["comments", id] });
       setCommentBody("");
+    },
+  });
+
+  const addTag = useMutation({
+    mutationFn: (tagId: string) => api.post(`/items/${id}/tags`, { tagId }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["items"] }),
+  });
+  const removeTag = useMutation({
+    mutationFn: (tagId: string) => api.delete(`/items/${id}/tags/${tagId}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["items"] }),
+  });
+  const createTag = useMutation({
+    mutationFn: (name: string) => api.post<Tag>("/tags", { name }),
+    onSuccess: (tag) => {
+      queryClient.invalidateQueries({ queryKey: ["tags"] });
+      setNewTagName("");
+      addTag.mutate(tag.id);
     },
   });
 
@@ -208,7 +228,7 @@ export default function ItemDetail() {
             onChange={(e) =>
               updateItem.mutate({ dueDate: e.target.value ? fromDatetimeLocalValue(e.target.value) : null })
             }
-            className="select"
+            className="input"
           />
         </div>
         <label className="flex items-center gap-2">
@@ -227,6 +247,44 @@ export default function ItemDetail() {
           />
           Dringend
         </label>
+      </div>
+
+      <div className="mb-4">
+        <label className="block mb-1.5 text-sm text-gray-600">Tags</label>
+        <div className="flex flex-wrap gap-1.5 mb-2">
+          {item.tags?.map(({ tag }) => (
+            <TagBadge key={tag.id} tag={tag} onRemove={() => removeTag.mutate(tag.id)} />
+          ))}
+          {item.tags?.length === 0 && <span className="text-xs text-gray-400">Keine Tags</span>}
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5">
+          {tags
+            ?.filter((t) => !item.tags?.some(({ tag }) => tag.id === t.id))
+            .map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => addTag.mutate(t.id)}
+                className="badge-neutral hover:bg-gray-200"
+              >
+                + {t.name}
+              </button>
+            ))}
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (newTagName.trim()) createTag.mutate(newTagName.trim());
+            }}
+            className="flex items-center gap-1"
+          >
+            <input
+              value={newTagName}
+              onChange={(e) => setNewTagName(e.target.value)}
+              placeholder="Neuer Tag…"
+              className="input text-xs px-2 py-1 min-h-0 w-28"
+            />
+          </form>
+        </div>
       </div>
 
       {googleStatus?.connected && item.dueDate && (
