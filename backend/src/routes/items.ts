@@ -4,6 +4,7 @@ import { requireAuth } from "../middleware/auth";
 import { fireWebhooks } from "../lib/webhooks";
 import { visibilityWhere, findItemForUser } from "../lib/itemAuthorization";
 import { RECURRENCE_RULES, nextOccurrence } from "../lib/recurrence";
+import { notifyMentionedUsers } from "../lib/mentions";
 
 const router = Router();
 router.use(requireAuth);
@@ -273,6 +274,15 @@ router.post("/:id/comments", async (req, res) => {
     data: { itemId: req.params.id, authorId: user.id, body },
     include: { author: { select: publicUserSelect } },
   });
+
+  notifyMentionedUsers({
+    body,
+    itemId: req.params.id,
+    itemTitle: existing.title,
+    authorId: user.id,
+    authorName: user.name,
+  });
+
   res.status(201).json(comment);
 });
 

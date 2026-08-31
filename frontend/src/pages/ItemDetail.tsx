@@ -6,6 +6,22 @@ import { Item, User, Comment, Tag } from "../lib/types";
 import { toDatetimeLocalValue, fromDatetimeLocalValue } from "../lib/datetime";
 import TagBadge from "../components/TagBadge";
 
+const MENTION_PATTERN = /@[a-zA-Z0-9._-]+/g;
+
+/** Highlights "@token" mentions in a comment body; matches the backend's parsing in lib/mentions.ts. */
+function renderWithMentions(body: string) {
+  const parts = body.split(MENTION_PATTERN);
+  const mentions = body.match(MENTION_PATTERN) ?? [];
+  return parts.flatMap((part, i) => [
+    part,
+    mentions[i] ? (
+      <span key={i} className="text-brand-700 font-medium">
+        {mentions[i]}
+      </span>
+    ) : null,
+  ]);
+}
+
 export default function ItemDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -344,7 +360,7 @@ export default function ItemDetail() {
         {comments?.map((c) => (
           <li key={c.id} className="text-sm bg-gray-50 border border-gray-100 rounded-lg p-2.5">
             <span className="font-medium">{c.author?.name}: </span>
-            {c.body}
+            {renderWithMentions(c.body)}
           </li>
         ))}
       </ul>
@@ -358,7 +374,7 @@ export default function ItemDetail() {
         <input
           value={commentBody}
           onChange={(e) => setCommentBody(e.target.value)}
-          placeholder="Kommentar hinzufügen…"
+          placeholder="Kommentar hinzufügen… (@name benachrichtigt per Mail)"
           className="input flex-1 text-sm"
         />
         <button type="submit" className="btn-primary text-sm px-3 py-1.5 min-h-0">
