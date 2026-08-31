@@ -269,3 +269,18 @@ sudo ./scripts/nisorga-lxc-schedule.sh --ctid 135 --task backup --disable
 Wichtige Optionen: `--ctid` (Pflicht), `--task update|backup` (Pflicht), `--schedule` (systemd-`OnCalendar`-Ausdruck, siehe `man systemd.time`; Standard: `03:00` für Updates, `02:00` für Backups), `--disable`. Alles nach `--` wird 1:1 an das geplante Skript durchgereicht (z. B. `--branch`, `--keep`).
 
 **Hinweis:** Das automatische Update pullt aus Git und baut/startet per Docker Compose neu — bei laufendem Betrieb kurzzeitig nicht erreichbar, keine Vorab-Prüfung auf Breaking Changes. Für produktive Instanzen ggf. lieber manuell anstoßen (`nisorga-lxc-update.sh`) oder vorher testen.
+
+### 6. HTTPS ohne eigenen Reverse Proxy (Caddy)
+
+Falls kein Nginx Proxy Manager (siehe [docs/deployment.md](docs/deployment.md)) vorhanden ist, richtet `scripts/nisorga-lxc-tls-setup.sh` stattdessen [Caddy](https://caddyserver.com/) als Reverse Proxy mit automatischem Let's-Encrypt-Zertifikat ein — als zusätzlicher Docker-Compose-Service (`docker-compose.tls.yml`), der intern an den `frontend`-Service weiterleitet (dessen eigener nginx kümmert sich schon um das API-Proxying zum Backend).
+
+Voraussetzungen (nicht Teil des Skripts): eine Domain, deren DNS auf die öffentliche IP dieses Containers zeigt, sowie Port 80 (ACME-HTTP-01-Challenge) und 443 von außen erreichbar (Portweiterleitung am Router auf den Proxmox-Host bzw. Container).
+
+```bash
+sudo ./scripts/nisorga-lxc-tls-setup.sh --ctid 135 --domain nisorga.deine-domain.tld --email du@deine-domain.tld
+
+# Wieder entfernen
+sudo ./scripts/nisorga-lxc-tls-setup.sh --ctid 135 --disable
+```
+
+Wichtige Optionen: `--ctid` (Pflicht), `--domain` (Pflicht außer bei `--disable`), `--email` (für Let's-Encrypt-Benachrichtigungen), `--dir`, `--disable`, `--dry-run`. Zertifikatsstatus prüfen: `docker compose -f docker-compose.yml -f docker-compose.tls.yml logs -f caddy` im Container.
