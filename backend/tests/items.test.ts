@@ -302,3 +302,64 @@ describe("search (GET /items?q=...)", () => {
     expect(res.body[0].title).toBe("Steuerbescheid prüfen");
   });
 });
+
+describe("export (GET /items/export)", () => {
+  let ownerCookie: string[];
+  let memberCookie: string[];
+
+  beforeEach(async () => {
+    ownerCookie = await registerAndLogin("owner@test.com", "Owner");
+    memberCookie = await registerAndLogin("member@test.com", "Member");
+    await request(app)
+      .post("/items")
+      .set("Cookie", ownerCookie)
+      .send({ title: "Mit \"Anführungszeichen\", Komma", description: "Zeile eins\nZeile zwei" });
+    await request(app).post("/items").set("Cookie", ownerCookie).send({ title: "Zweites Item" });
+  });
+
+  it("defaults to CSV with the right headers and a matching row count", async () => {
+    const res = await request(app).get("/items/export").set("Cookie", ownerCookie);
+    expect(res.status).toBe(200);
+    expect(res.headers["content-type"]).toMatch(/text\/csv/);
+    expect(res.headers["content-disposition"]).toMatch(/^attachment; filename="nisorga-items-\d{4}-\d{2}-\d{2}\.csv"$/);
+
+    const lines = res.text.trim().split("\r\n");
+    expect(lines[0]).toBe(
+      "id,type,title,description,status,important,urgent,dueDate,waitingSince,source,createdBy,assignedTo,createdAt,updatedAt"
+    );
+    // header + 2 data rows
+    expect(lines).toHaveLength(3);
+  });
+
+  it("quotes and escapes CSV fields containing commas/quotes/newlines", async () => {
+    const res = await request(app).get("/items/export?format=csv").set("Cookie", ownerCookie);
+    expect(res.text).toContain('"Mit ""Anführungszeichen"", Komma"');
+    expect(res.text).toContain('"Zeile eins\nZeile zwei"');
+  });
+
+  it("supports format=json with a Content-Disposition attachment header", async () => {
+    const res = await request(app).get("/items/export?format=json").set("Cookie", ownerCookie);
+    expect(res.status).toBe(200);
+    expect(res.headers["content-disposition"]).toMatch(/^attachment; filename="nisorga-items-\d{4}-\d{2}-\d{2}\.json"$/);
+    expect(res.body).toHaveLength(2);
+    expect(res.body.map((i: { title: string }) => i.title)).toContain("Zweites Item");
+  });
+
+  it("rejects an unknown format", async () => {
+    const res = await request(app).get("/items/export?format=xml").set("Cookie", ownerCookie);
+    expect(res.status).toBe(400);
+  });
+
+  it("respects visibility rules like GET /items", async () => {
+    const res = await request(app).get("/items/export?format=json").set("Cookie", memberCookie);
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual([]);
+  });
+
+  it("combines with type/status/q filters like GET /items", async () => {
+    const res = await request(app).get("/items/export?format=json&q=zweites").set("Cookie", ownerCookie);
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveLength(1);
+    expect(res.body[0].title).toBe("Zweites Item");
+  });
+});

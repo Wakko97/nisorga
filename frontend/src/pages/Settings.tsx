@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api } from "../lib/api";
+import { api, downloadFile } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 import { ApiKeyInfo, WebhookSubscription, MailSettings, AppSettings } from "../lib/types";
 
@@ -51,6 +51,7 @@ export default function Settings() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const isOwner = user?.role === "OWNER";
+  const [exportError, setExportError] = useState<string | null>(null);
 
   const { data: googleStatus } = useQuery<{ connected: boolean }>({
     queryKey: ["google-status"],
@@ -258,6 +259,36 @@ export default function Settings() {
           Zusätzlich erhältst du freitags einen wöchentlichen Rückblick per E-Mail mit offenen Inbox-Punkten,
           überfälligen Aufgaben und unbearbeiteten Ideen.
         </p>
+      </section>
+
+      <section className="bg-white border rounded-lg p-4">
+        <h2 className="font-semibold mb-2">Daten-Export</h2>
+        <p className="text-sm text-gray-600 mb-3">
+          Lädt alle für dich sichtbaren Items (Owner: alle, Mitglieder: eigene/zugewiesene) herunter.
+        </p>
+        <div className="flex gap-2">
+          <button
+            onClick={() =>
+              downloadFile("/items/export?format=csv", "nisorga-items.csv").catch(() =>
+                setExportError("Export fehlgeschlagen.")
+              )
+            }
+            className="text-sm px-3 py-1.5 rounded border border-gray-300 hover:bg-gray-100"
+          >
+            Als CSV exportieren
+          </button>
+          <button
+            onClick={() =>
+              downloadFile("/items/export?format=json", "nisorga-items.json").catch(() =>
+                setExportError("Export fehlgeschlagen.")
+              )
+            }
+            className="text-sm px-3 py-1.5 rounded border border-gray-300 hover:bg-gray-100"
+          >
+            Als JSON exportieren
+          </button>
+        </div>
+        {exportError && <p className="text-red-600 text-xs mt-2">{exportError}</p>}
       </section>
 
       {isOwner && (

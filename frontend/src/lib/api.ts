@@ -129,6 +129,39 @@ export async function apiUpload<T = unknown>(path: string, file: File | Blob, fi
 }
 
 /**
+ * Fetches an authenticated, cookie-protected file (e.g. GET /items/export)
+ * and saves it via a synthetic <a download> click - a plain navigation to
+ * the URL wouldn't carry the app's access-token-refresh handling, and a
+ * cross-origin API means the browser can't just be pointed at the URL
+ * directly for an in-place download anyway. Reads the filename from the
+ * response's Content-Disposition header, falling back to fallbackFilename.
+ */
+export async function downloadFile(path: string, fallbackFilename: string, _retried = false): Promise<void> {
+  const res = await fetch(`${API_URL}${path}`, { credentials: "include" });
+
+  if (res.status === 401 && !_retried) {
+    const refreshed = await refreshAccessToken();
+    if (refreshed) return downloadFile(path, fallbackFilename, true);
+  }
+
+  if (!res.ok) throw new ApiError(res.status, res.statusText);
+
+  const disposition = res.headers.get("Content-Disposition") ?? "";
+  const filenameMatch = disposition.match(/filename="([^"]+)"/);
+  const filename = filenameMatch?.[1] ?? fallbackFilename;
+
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+/**
  * Fetches an authenticated attachment (cookie-protected, so it cannot be
  * used as a plain <img src>) and returns a local blob: URL for display.
  * Caller is responsible for revoking it (URL.revokeObjectURL) when done.

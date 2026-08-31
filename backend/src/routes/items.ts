@@ -1,8 +1,9 @@
 import { Router } from "express";
 import { prisma, publicUserSelect } from "../lib/prisma";
-import { requireAuth } from "../middleware/auth";
+import { requireAuth, AuthUser } from "../middleware/auth";
 import { fireWebhooks } from "../lib/webhooks";
 import { visibilityWhere, findItemForUser } from "../lib/itemAuthorization";
+import { toCsv } from "../lib/csv";
 
 const router = Router();
 router.use(requireAuth);
@@ -10,15 +11,20 @@ router.use(requireAuth);
 const VALID_TYPES = ["IDEA", "TASK"];
 const VALID_STATUSES = ["INBOX", "TODO", "IN_PROGRESS", "WAITING", "DONE"];
 
-router.get("/", async (req, res) => {
-  const user = req.user!;
-  const { type, status, q } = req.query;
+/**
+ * Shared by GET / and GET /export so the two stay in sync (both should
+ * respect the same visibility rules and type/status/q filters). Returns
+ * an error string instead of throwing so each route can turn it into its
+ * own 400 response.
+ */
+function buildItemsWhere(user: AuthUser, query: Record<string, unknown>): { where?: any; error?: string } {
+  const { type, status, q } = query;
 
   if (type !== undefined && !VALID_TYPES.includes(String(type))) {
-    return res.status(400).json({ error: "Invalid type" });
+    return { error: "Invalid type" };
   }
   if (status !== undefined && !VALID_STATUSES.includes(String(status))) {
-    return res.status(400).json({ error: "Invalid status" });
+    return { error: "Invalid status" };
   }
 
   // Case-insensitive substring match on title/description - not a "real"
@@ -26,7 +32,7 @@ router.get("/", async (req, res) => {
   // migration and is plenty for the item volumes this app is built for.
   const search = q !== undefined ? String(q).trim() : "";
 
-  const items = await prisma.item.findMany({
+  return {
     where: {
       ...visibilityWhere(user),
       ...(type ? { type: String(type) as any } : {}),
@@ -40,10 +46,76 @@ router.get("/", async (req, res) => {
           }
         : {}),
     },
+  };
+}
+
+router.get("/", async (req, res) => {
+  const user = req.user!;
+  const { where, error } = buildItemsWhere(user, req.query);
+  if (error) return res.status(400).json({ error });
+
+  const items = await prisma.item.findMany({
+    where,
     include: { createdBy: { select: publicUserSelect }, assignedTo: { select: publicUserSelect } },
     orderBy: { createdAt: "desc" },
   });
   res.json(items);
+});
+
+const EXPORT_CSV_COLUMNS = [
+  "id",
+  "type",
+  "title",
+  "description",
+  "status",
+  "important",
+  "urgent",
+  "dueDate",
+  "waitingSince",
+  "source",
+  "createdBy",
+  "assignedTo",
+  "createdAt",
+  "updatedAt",
+];
+
+// GET /items/export?format=csv|json&type=&status=&q= - same visibility
+// rules and filters as GET /, just returned as a downloadable file instead
+// of a plain JSON response body. Must be registered before any GET /:id
+// route is ever added, so "export" is never captured as an :id param.
+router.get("/export", async (req, res) => {
+  const user = req.user!;
+  const { where, error } = buildItemsWhere(user, req.query);
+  if (error) return res.status(400).json({ error });
+
+  const items = await prisma.item.findMany({
+    where,
+    include: { createdBy: { select: publicUserSelect }, assignedTo: { select: publicUserSelect } },
+    orderBy: { createdAt: "desc" },
+  });
+
+  const date = new Date().toISOString().slice(0, 10);
+  const format = String(req.query.format ?? "csv").toLowerCase();
+
+  if (format === "json") {
+    res.setHeader("Content-Disposition", `attachment; filename="nisorga-items-${date}.json"`);
+    return res.json(items);
+  }
+
+  if (format !== "csv") {
+    return res.status(400).json({ error: "format must be 'csv' or 'json'" });
+  }
+
+  const rows = items.map((item) => ({
+    ...item,
+    createdBy: item.createdBy?.name ?? "",
+    assignedTo: item.assignedTo?.name ?? "",
+  }));
+  const csv = toCsv(EXPORT_CSV_COLUMNS, rows);
+
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader("Content-Disposition", `attachment; filename="nisorga-items-${date}.csv"`);
+  res.send(csv);
 });
 
 router.post("/", async (req, res) => {
