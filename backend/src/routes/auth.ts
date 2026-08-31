@@ -1,6 +1,7 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
+import jwt from "jsonwebtoken";
 import rateLimit from "express-rate-limit";
 import { prisma } from "../lib/prisma";
 import { signToken, requireAuth } from "../middleware/auth";
@@ -8,6 +9,15 @@ import { rotateRefreshToken, revokeRefreshToken } from "../lib/refreshToken";
 import { sendEmail } from "../lib/mailer";
 import { issueSessionCookies, clearSessionCookies, ACCESS_COOKIE_OPTS, REFRESH_COOKIE_OPTS } from "../lib/session";
 import { getWaitingReminderDays } from "../lib/appConfig";
+import { encrypt, decrypt } from "../lib/crypto";
+import {
+  generateTotpSecret,
+  generateTotpQrCodeDataUrl,
+  verifyTotpToken,
+  generateBackupCodes,
+  hashBackupCodes,
+  consumeBackupCode,
+} from "../lib/twoFactor";
 
 const router = Router();
 
@@ -34,8 +44,39 @@ const resendVerificationRateLimit = rateLimit({
   message: { error: "Too many verification emails requested, please try again later." },
 });
 
+// Brute-force protection on the second login step (TOTP/backup code) - a
+// 6-digit TOTP code has only 10^6 possibilities, so this needs its own
+// tight limit independent of loginRateLimit above (which is keyed on
+// email+password attempts, not this step).
+const twoFactorVerifyRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => `${req.ip}:${String(req.body?.tempToken ?? "")}`,
+  message: { error: "Too many attempts, please try again later." },
+});
+
 const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173";
 const EMAIL_VERIFY_TTL_MS = 24 * 60 * 60 * 1000;
+const TWO_FACTOR_PENDING_TTL = "5m";
+
+// Short-lived, tamper-proof token binding the second login step to a
+// specific user who already proved their password - same pattern as
+// lib/google.ts's OAuth state token. Deliberately NOT a session cookie:
+// it must expire quickly and prove nothing beyond "this request already
+// passed step 1 of login for this user".
+function signTwoFactorPendingToken(userId: string): string {
+  return jwt.sign({ uid: userId, purpose: "2fa-pending" }, process.env.JWT_SECRET!, {
+    expiresIn: TWO_FACTOR_PENDING_TTL,
+  });
+}
+
+function verifyTwoFactorPendingToken(token: string): string {
+  const payload = jwt.verify(token, process.env.JWT_SECRET!) as { uid: string; purpose: string };
+  if (payload.purpose !== "2fa-pending") throw new Error("Wrong token purpose");
+  return payload.uid;
+}
 
 // Split in two so the token itself is always persisted before the caller
 // moves on, even when the actual send is fire-and-forget (see /register
@@ -111,6 +152,47 @@ router.post("/login", loginRateLimit, async (req, res) => {
   const valid = await bcrypt.compare(password, user.passwordHash);
   if (!valid) return res.status(401).json({ error: "Invalid credentials" });
 
+  if (user.twoFactorEnabled) {
+    // Password was correct, but that alone isn't enough to issue a
+    // session - hand back a short-lived token identifying who passed step
+    // 1, to be presented alongside a TOTP/backup code at
+    // POST /auth/2fa/verify-login.
+    return res.json({ twoFactorRequired: true, tempToken: signTwoFactorPendingToken(user.id) });
+  }
+
+  await issueSessionCookies(res, user);
+  res.json({ id: user.id, email: user.email, name: user.name, role: user.role, emailVerified: user.emailVerified });
+});
+
+// Step 2 of login when 2FA is enabled: presents the tempToken from
+// POST /login plus either a 6-digit TOTP code or a backup code.
+router.post("/2fa/verify-login", twoFactorVerifyRateLimit, async (req, res) => {
+  const { tempToken, token, backupCode } = req.body ?? {};
+  if (!tempToken || (!token && !backupCode)) {
+    return res.status(400).json({ error: "tempToken and either token or backupCode are required" });
+  }
+
+  let userId: string;
+  try {
+    userId = verifyTwoFactorPendingToken(String(tempToken));
+  } catch {
+    return res.status(401).json({ error: "Invalid or expired login attempt, please log in again" });
+  }
+
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user || !user.twoFactorEnabled || !user.twoFactorSecretEnc) {
+    return res.status(401).json({ error: "Invalid or expired login attempt, please log in again" });
+  }
+
+  if (token) {
+    const valid = await verifyTotpToken(decrypt(user.twoFactorSecretEnc), String(token));
+    if (!valid) return res.status(401).json({ error: "Invalid code" });
+  } else {
+    const { matched, remaining } = await consumeBackupCode(user.twoFactorBackupCodeHashes, String(backupCode));
+    if (!matched) return res.status(401).json({ error: "Invalid backup code" });
+    await prisma.user.update({ where: { id: user.id }, data: { twoFactorBackupCodeHashes: remaining } });
+  }
+
   await issueSessionCookies(res, user);
   res.json({ id: user.id, email: user.email, name: user.name, role: user.role, emailVerified: user.emailVerified });
 });
@@ -150,7 +232,7 @@ router.post("/logout", async (req, res) => {
 router.get("/me", requireAuth, async (req, res) => {
   const user = await prisma.user.findUnique({
     where: { id: req.user!.id },
-    select: { id: true, email: true, name: true, role: true, emailVerified: true },
+    select: { id: true, email: true, name: true, role: true, emailVerified: true, twoFactorEnabled: true },
   });
   res.json({ ...user, waitingReminderDays: await getWaitingReminderDays() });
 });
@@ -177,6 +259,64 @@ router.post("/resend-verification", requireAuth, resendVerificationRateLimit, as
   if (user.emailVerified) return res.status(400).json({ error: "Email already verified" });
 
   await sendVerificationEmail(user);
+  res.json({ ok: true });
+});
+
+// Two-factor authentication management (all require an existing session -
+// this is not the login-time verification, see POST /2fa/verify-login).
+
+// Generates a new (unconfirmed) TOTP secret and its QR code. Overwrites any
+// previous pending secret - calling /setup again before /enable just
+// restarts setup. Has no effect on login until /enable succeeds.
+router.post("/2fa/setup", requireAuth, async (req, res) => {
+  const user = await prisma.user.findUnique({ where: { id: req.user!.id } });
+  if (!user) return res.status(404).json({ error: "User not found" });
+
+  const secret = generateTotpSecret();
+  await prisma.user.update({ where: { id: user.id }, data: { twoFactorSecretEnc: encrypt(secret) } });
+
+  const qrCodeDataUrl = await generateTotpQrCodeDataUrl(user.email, secret);
+  res.json({ secret, qrCodeDataUrl });
+});
+
+// Confirms possession of the secret from /setup and turns 2FA on. Returns
+// the backup codes in plaintext - the only time they're ever shown.
+router.post("/2fa/enable", requireAuth, async (req, res) => {
+  const { token } = req.body ?? {};
+  if (!token) return res.status(400).json({ error: "token is required" });
+
+  const user = await prisma.user.findUnique({ where: { id: req.user!.id } });
+  if (!user?.twoFactorSecretEnc) return res.status(400).json({ error: "Call /2fa/setup first" });
+  if (user.twoFactorEnabled) return res.status(400).json({ error: "2FA is already enabled" });
+
+  const valid = await verifyTotpToken(decrypt(user.twoFactorSecretEnc), String(token));
+  if (!valid) return res.status(401).json({ error: "Invalid code" });
+
+  const backupCodes = generateBackupCodes();
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { twoFactorEnabled: true, twoFactorBackupCodeHashes: await hashBackupCodes(backupCodes) },
+  });
+
+  res.json({ ok: true, backupCodes });
+});
+
+// Re-authentication (password) required: this is a security-lowering
+// action, so a hijacked-but-unattended session alone shouldn't be enough.
+router.post("/2fa/disable", requireAuth, async (req, res) => {
+  const { password } = req.body ?? {};
+  if (!password) return res.status(400).json({ error: "password is required" });
+
+  const user = await prisma.user.findUnique({ where: { id: req.user!.id } });
+  if (!user) return res.status(404).json({ error: "User not found" });
+
+  const valid = await bcrypt.compare(password, user.passwordHash);
+  if (!valid) return res.status(401).json({ error: "Invalid password" });
+
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { twoFactorEnabled: false, twoFactorSecretEnc: null, twoFactorBackupCodeHashes: [] },
+  });
   res.json({ ok: true });
 });
 

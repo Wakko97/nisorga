@@ -85,6 +85,17 @@ model User {
   emailVerifyExpiresAt  DateTime?
   createdAt             DateTime  @default(now())
 
+  // TOTP-based 2FA (RFC 6238). Secret is AES-256-GCM encrypted at rest
+  // (lib/crypto.ts). Written by POST /auth/2fa/setup as soon as a QR code
+  // is generated, but twoFactorEnabled only flips to true once the user
+  // proves possession of it via POST /auth/2fa/enable - until then it's
+  // just an unconfirmed pending secret with no effect on login.
+  // twoFactorBackupCodeHashes are single-use, bcrypt-hashed, consumed (and
+  // removed from the array) one at a time by lib/twoFactor.ts.
+  twoFactorSecretEnc        String?
+  twoFactorEnabled          Boolean  @default(false)
+  twoFactorBackupCodeHashes String[] @default([])
+
   createdItems    Item[]              @relation("CreatedItems")
   assignedItems   Item[]              @relation("AssignedItems")
   comments        Comment[]

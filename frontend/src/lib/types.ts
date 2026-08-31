@@ -10,7 +10,18 @@ export interface User {
   role: Role;
   emailVerified?: boolean;
   waitingReminderDays?: number;
+  twoFactorEnabled?: boolean;
   createdAt?: string;
+}
+
+export interface LoginResponse {
+  id?: string;
+  email?: string;
+  name?: string;
+  role?: Role;
+  emailVerified?: boolean;
+  twoFactorRequired?: boolean;
+  tempToken?: string;
 }
 
 export interface SmtpSettings {

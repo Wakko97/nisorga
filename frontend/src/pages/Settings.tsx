@@ -55,6 +55,45 @@ export default function Settings() {
   const [exportError, setExportError] = useState<string | null>(null);
   const push = usePushNotifications();
 
+  // Two-factor authentication (TOTP) setup/enable/disable.
+  const [twoFactorSetup, setTwoFactorSetup] = useState<{ secret: string; qrCodeDataUrl: string } | null>(null);
+  const [confirmCode, setConfirmCode] = useState("");
+  const [backupCodes, setBackupCodes] = useState<string[] | null>(null);
+  const [showDisable2fa, setShowDisable2fa] = useState(false);
+  const [disablePassword, setDisablePassword] = useState("");
+  const [twoFactorError, setTwoFactorError] = useState<string | null>(null);
+
+  const startTwoFactorSetup = useMutation({
+    mutationFn: () => api.post<{ secret: string; qrCodeDataUrl: string }>("/auth/2fa/setup"),
+    onSuccess: (data) => {
+      setTwoFactorSetup(data);
+      setTwoFactorError(null);
+    },
+  });
+
+  const confirmTwoFactorSetup = useMutation({
+    mutationFn: (token: string) => api.post<{ backupCodes: string[] }>("/auth/2fa/enable", { token }),
+    onSuccess: (data) => {
+      setTwoFactorSetup(null);
+      setConfirmCode("");
+      setBackupCodes(data.backupCodes);
+      setTwoFactorError(null);
+      queryClient.invalidateQueries({ queryKey: ["me"] });
+    },
+    onError: () => setTwoFactorError("Code ungültig."),
+  });
+
+  const disableTwoFactor = useMutation({
+    mutationFn: (password: string) => api.post("/auth/2fa/disable", { password }),
+    onSuccess: () => {
+      setShowDisable2fa(false);
+      setDisablePassword("");
+      setTwoFactorError(null);
+      queryClient.invalidateQueries({ queryKey: ["me"] });
+    },
+    onError: () => setTwoFactorError("Passwort ungültig."),
+  });
+
   const { data: googleStatus } = useQuery<{ connected: boolean }>({
     queryKey: ["google-status"],
     queryFn: () => api.get("/integrations/google/status"),
@@ -249,6 +288,100 @@ export default function Settings() {
             </button>
             {push.error && <p className="text-red-600 text-xs mt-2">{push.error}</p>}
           </>
+        )}
+      </section>
+
+      <section className="bg-white border rounded-lg p-4">
+        <h2 className="font-semibold mb-2">Zwei-Faktor-Authentifizierung (2FA)</h2>
+
+        {!user?.twoFactorEnabled && !twoFactorSetup && !backupCodes && (
+          <>
+            <p className="text-sm text-gray-600 mb-3">
+              Schützt dein Konto zusätzlich mit einem Code aus einer Authenticator-App (z. B. Google Authenticator,
+              Aegis, 1Password).
+            </p>
+            <button
+              onClick={() => startTwoFactorSetup.mutate()}
+              className="text-sm px-3 py-1.5 rounded bg-gray-900 text-white"
+            >
+              Aktivieren
+            </button>
+          </>
+        )}
+
+        {twoFactorSetup && (
+          <div>
+            <p className="text-sm text-gray-600 mb-3">
+              QR-Code mit der Authenticator-App scannen (oder den Code manuell eingeben) und danach den
+              6-stelligen Code zur Bestätigung eintragen.
+            </p>
+            <img src={twoFactorSetup.qrCodeDataUrl} alt="2FA-QR-Code" className="mb-2 border rounded" width={200} height={200} />
+            <p className="text-xs text-gray-500 mb-3 font-mono break-all">{twoFactorSetup.secret}</p>
+            <div className="flex gap-2">
+              <input
+                value={confirmCode}
+                onChange={(e) => setConfirmCode(e.target.value)}
+                placeholder="6-stelliger Code"
+                inputMode="numeric"
+                className="flex-1 border rounded px-3 py-2 text-sm"
+              />
+              <button
+                onClick={() => confirmTwoFactorSetup.mutate(confirmCode)}
+                className="text-sm px-3 py-1.5 rounded bg-gray-900 text-white"
+              >
+                Bestätigen
+              </button>
+            </div>
+            {twoFactorError && <p className="text-red-600 text-xs mt-2">{twoFactorError}</p>}
+          </div>
+        )}
+
+        {backupCodes && (
+          <div>
+            <p className="text-sm text-green-700 mb-2">2FA ist aktiviert. Backup-Codes (jeder nur einmal gültig, jetzt sichern — sie werden nicht erneut angezeigt):</p>
+            <ul className="grid grid-cols-2 gap-1 font-mono text-sm bg-gray-50 border rounded p-3 mb-3">
+              {backupCodes.map((c) => (
+                <li key={c}>{c}</li>
+              ))}
+            </ul>
+            <button
+              onClick={() => setBackupCodes(null)}
+              className="text-sm px-3 py-1.5 rounded border border-gray-300 hover:bg-gray-100"
+            >
+              Gesichert, ausblenden
+            </button>
+          </div>
+        )}
+
+        {user?.twoFactorEnabled && !backupCodes && !twoFactorSetup && (
+          <div>
+            <p className="text-sm text-green-700 mb-3">2FA ist aktiviert.</p>
+            {!showDisable2fa ? (
+              <button
+                onClick={() => setShowDisable2fa(true)}
+                className="text-sm px-3 py-1.5 rounded border border-gray-300 hover:bg-gray-100"
+              >
+                Deaktivieren
+              </button>
+            ) : (
+              <div className="flex gap-2">
+                <input
+                  type="password"
+                  value={disablePassword}
+                  onChange={(e) => setDisablePassword(e.target.value)}
+                  placeholder="Passwort zur Bestätigung"
+                  className="flex-1 border rounded px-3 py-2 text-sm"
+                />
+                <button
+                  onClick={() => disableTwoFactor.mutate(disablePassword)}
+                  className="text-sm px-3 py-1.5 rounded bg-red-600 text-white"
+                >
+                  Deaktivieren
+                </button>
+              </div>
+            )}
+            {twoFactorError && <p className="text-red-600 text-xs mt-2">{twoFactorError}</p>}
+          </div>
         )}
       </section>
 
