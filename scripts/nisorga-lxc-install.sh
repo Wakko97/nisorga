@@ -246,13 +246,25 @@ install_app() {
     fi
 
     local remote_script="/root/nisorga-app-install.sh"
-    if [[ -f "$APP_INSTALL_SCRIPT" ]]; then
-        log INFO "Pushing nisorga-app-install.sh into container"
-        pct push "$CTID" "$APP_INSTALL_SCRIPT" "$remote_script"
-    else
-        log INFO "Local install script not found, downloading it inside the container"
-        pct exec "$CTID" -- bash -c "curl -fsSL '$APP_INSTALL_URL' -o '$remote_script'"
+    local local_script="$APP_INSTALL_SCRIPT"
+    local tmp_script=""
+
+    if [[ ! -f "$local_script" ]]; then
+        # Common case: this script itself was run via 'bash <(curl ...)', so
+        # there is no local checkout to read nisorga-app-install.sh from.
+        # Download it here on the Proxmox host (which definitely has curl -
+        # it's how we got this far) rather than inside the freshly created
+        # container, which is a minimal template and may not have curl/wget
+        # installed yet.
+        log INFO "Local install script not found, downloading it to the Proxmox host first"
+        tmp_script="$(mktemp)"
+        curl -fsSL "$APP_INSTALL_URL" -o "$tmp_script"
+        local_script="$tmp_script"
     fi
+
+    log INFO "Pushing nisorga-app-install.sh into container"
+    pct push "$CTID" "$local_script" "$remote_script"
+    [[ -n "$tmp_script" ]] && rm -f "$tmp_script"
     pct exec "$CTID" -- chmod +x "$remote_script"
 
     log INFO "Running application installer inside container $CTID"
