@@ -21,9 +21,9 @@
 #   --ip <cidr|dhcp>         Static IP as CIDR (e.g. 192.168.1.50/24) or "dhcp" (default: dhcp)
 #   --gateway <ip>           Gateway IP, required when --ip is static
 #   --cores <n>               CPU cores (default: 2)
-#   --memory <MB>              RAM in MB (default: 1024)
-#   --swap <MB>                 Swap in MB (default: 512)
-#   --disk <GB>                    Root disk size in GB (default: 4)
+#   --memory <MB>              RAM in MB (default: 4096)
+#   --swap <MB>                 Swap in MB (default: 2048)
+#   --disk <GB>                    Root disk size in GB (default: 16)
 #   --password <pass>                Root password (default: randomly generated)
 #   --repo <url>                       Nisorga git repo URL (default: https://github.com/Wakko97/nisorga.git)
 #   --branch <name>                     Git branch to deploy (default: main)
@@ -41,10 +41,15 @@ TEMPLATE_STORAGE=""
 BRIDGE="vmbr0"
 IP="dhcp"
 GATEWAY=""
+# Building the app's Docker images (tsc for the backend, Vite for the
+# frontend, both in the same 'docker compose build' run) needs real headroom
+# - 1024MB reliably OOM-kills 'npm run build' (tsc gets SIGKILL) inside the
+# container. 4096/2048 has margin; the disk covers Docker layers, node
+# modules and the Postgres volume together.
 CORES=2
-MEMORY=1024
-SWAP=512
-DISK=4
+MEMORY=4096
+SWAP=2048
+DISK=16
 ROOT_PASSWORD=""
 REPO_URL="https://github.com/Wakko97/nisorga.git"
 BRANCH="main"
