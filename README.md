@@ -1,60 +1,205 @@
-# nisorga
+# Nisorga
 
-## Proxmox VE Host Setup
+Eine Web-App für Geschäftsführer:innen zur schnellen Erfassung von Ideen und Aufgaben (GTD-artig), mit Eisenhower-Matrix, Mehrbenutzer-Unterstützung (Owner + Mitglieder/Assistenz), Google-Kalender-Sync und einer offenen Integrations-API (API-Key + Webhooks).
 
-`scripts/proxmox-host-setup.sh` ist ein Post-Installations-Skript für einen frisch installierten Proxmox VE Host. Es ist **kein** Skript, das Proxmox selbst installiert (das erfolgt über das offizielle ISO), sondern richtet einen bestehenden Proxmox-Host für den produktiven Einsatz ein.
+## Struktur
 
-Das Skript erledigt folgende Schritte (jeweils einzeln abschaltbar):
+Monorepo mit npm workspaces:
 
-- Enterprise-Repository deaktivieren und das kostenlose `pve-no-subscription`-Repository einrichten (inkl. Deaktivierung eines eventuell vorhandenen Ceph-Enterprise-Repos)
-- System aktualisieren (`apt update && apt full-upgrade`)
-- Das Abo-Popup ("No valid subscription") im Webinterface dauerhaft entfernen (übersteht auch künftige `pve-manager`-Updates)
-- Gängige CLI-Tools installieren (curl, vim, htop, git, chrony, …)
-- Zeitzone setzen und Zeitsynchronisation (chrony/systemd-timesyncd) aktivieren
+```
+/backend   Node.js + Express + TypeScript + Prisma + PostgreSQL
+/frontend  React + Vite + TypeScript + Tailwind CSS + React Router + TanStack Query
+/scripts   Betriebs-/Deployment-Skripte für Proxmox VE (siehe unten)
+```
 
-Das Skript ist idempotent und kann gefahrlos mehrfach ausgeführt werden.
+## Features
 
-### Verwendung
+- **Schnellerfassung**: Ein Eingabefeld auf der Inbox-Seite, Tastenkürzel „n" fokussiert es von überall, Enter speichert.
+- **GTD-Workflow**: Items landen in der Inbox und werden von dort verfeinert (Typ, Priorität, Zuweisung, Status).
+- **Eisenhower-Matrix**: Items per Drag & Drop zwischen den vier Quadranten (wichtig/dringend) verschieben.
+- **Aufgabenliste** mit Filtern nach Status, Zuweisung, Fälligkeit.
+- **Mehrbenutzer**: Der Owner-Account wird einmalig über den [Einrichtungswizard](#einrichtungswizard) angelegt, alle Selbstregistrierungen danach werden `MEMBER`. Owner sehen alle Items, Mitglieder nur eigene bzw. ihnen zugewiesene.
+- **Google-Kalender-Sync**: OAuth2-Verbindung, Items mit Fälligkeitsdatum können als Kalender-Event angelegt/aktualisiert werden.
+- **Offene Integrations-API** (`/api/v1`): externe Systeme können per API-Key Items anlegen/lesen. Zusätzlich können Webhooks abonniert werden, die bei `item.created`/`item.updated` ausgelöst werden.
+
+## Voraussetzungen
+
+- Node.js >= 18
+- PostgreSQL (lokal oder remote erreichbar)
+- Ein Google Cloud Projekt mit aktivierter Calendar API und OAuth2-Credentials (für die Kalender-Integration; optional für den restlichen Betrieb)
+
+## Setup
+
+1. Repository klonen, Abhängigkeiten installieren:
+
+   ```bash
+   npm install
+   ```
+
+   Das installiert Backend und Frontend über npm workspaces in einem Schritt.
+
+2. Umgebungsvariablen anlegen:
+
+   ```bash
+   cp backend/.env.example backend/.env
+   cp frontend/.env.example frontend/.env
+   ```
+
+   Backend `.env` ausfüllen: `DATABASE_URL`, `JWT_SECRET`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`, `GOOGLE_TOKEN_ENCRYPTION_KEY`, `PORT`, `FRONTEND_URL`.
+
+   > **Hinweis:** `GoogleAccount.accessToken`/`refreshToken` werden verschlüsselt in der Datenbank gespeichert — siehe Abschnitt [Produktivhärtung](#produktivhärtung) für Details zu `GOOGLE_TOKEN_ENCRYPTION_KEY`.
+
+3. Datenbankschema anwenden:
+
+   ```bash
+   cd backend
+   npx prisma generate
+   npx prisma migrate dev --name init
+   ```
+
+   Falls keine PostgreSQL-Instanz verfügbar ist, kann das Schema trotzdem geprüft werden mit `npx prisma validate` (führt keine echte Migration aus).
+
+4. Beide Workspaces im Entwicklungsmodus starten (in zwei Terminals):
+
+   ```bash
+   npm run dev:backend
+   npm run dev:frontend
+   ```
+
+   Backend läuft standardmäßig auf `http://localhost:4000`, Frontend auf `http://localhost:5173`.
+
+5. Frontend im Browser öffnen (`http://localhost:5173`) — bei einer frischen Installation leitet die App automatisch zum [Einrichtungswizard](#einrichtungswizard) weiter.
+
+## Einrichtungswizard
+
+Bei einer frischen Installation (noch kein Owner-Account angelegt) leitet die App jede Route auf `/setup` um. Der Wizard führt durch:
+
+1. **Willkommen** — kurzer Überblick über die App.
+2. **Owner-Account anlegen** — Name, E-Mail, Passwort (min. 8 Zeichen). Ruft `POST /setup/init` auf, das atomar genau einmal einen Owner-Account erzeugen kann (verhindert eine Race Condition bei gleichzeitigen Erstaufrufen). Ist die App bereits eingerichtet, meldet der Wizard das und verlinkt zu `/login`.
+3. **Server-Konfiguration** — reine Statusanzeige (`GET /setup/status`), ob Google Calendar, SendGrid und der E-Mail-Empfang serverseitig konfiguriert sind. Secrets werden bewusst NICHT über den Browser gesetzt — das bleibt Sache der `.env`-Datei (siehe oben und [Produktivhärtung](#produktivhärtung)).
+
+Nach Abschluss landest du eingeloggt als Owner in der Inbox. Alle späteren Selbstregistrierungen über `/register` werden automatisch `MEMBER`.
+
+## Google-Kalender-Integration einrichten
+
+1. In der Google Cloud Console ein Projekt anlegen, die "Google Calendar API" aktivieren.
+2. OAuth2-Client-ID (Typ "Webanwendung") anlegen, als Redirect-URI `http://localhost:4000/integrations/google/callback` eintragen.
+3. Client-ID/-Secret in `backend/.env` eintragen.
+4. In der App unter **Einstellungen** auf "Google Kalender verbinden" klicken.
+
+## Externe Integrations-API
+
+Siehe [docs/api.md](docs/api.md) für die vollständige Dokumentation der `/api/v1`-Schnittstelle (API-Key-Auth) sowie der Webhooks.
+
+## Docker-Deployment
+
+Siehe [docs/deployment.md](docs/deployment.md) für eine vollständige Anleitung, wie die App per Docker Compose (Backend, Frontend, PostgreSQL) hinter einem bereits laufenden Nginx Proxy Manager bereitgestellt wird.
+
+## Erweiterte Features
+
+- **Wochenrückblick** (`/review`, Backend `GET /review/weekly`): zeigt offene Inbox-Punkte, überfällige Aufgaben und seit über 3 Tagen unbearbeitete Ideen, mit Inline-Aktionen (Priorität setzen, zu Aufgabe konvertieren, zuweisen, archivieren). Dieselbe Sichtbarkeitslogik wie bei `/items` (Owner sehen alles, Mitglieder nur eigene/zugewiesene Items).
+- **E-Mail-Erfassung**: Jeder Nutzer bekommt eine persönliche Inbound-Adresse (`inbox+<token>@<EMAIL_INBOUND_DOMAIN>`, sichtbar/kopierbar unter Einstellungen). Eingehende Mails werden über SendGrid Inbound Parse als Idee in der Inbox angelegt (`source=EMAIL`).
+- **Delegations-Tracking & Erinnerungen**: Items können auf Status „Wartet auf Rückmeldung" (`WAITING`) gesetzt werden; `waitingSince` wird automatisch gepflegt. Ein täglicher Cron-Job verschickt nach `WAITING_REMINDER_DAYS` (Default 3) eine Erinnerungsmail an Ersteller:in und Zugewiesene:n. Aufgaben-/Matrix-Ansicht zeigen ein rotes "überfällig, wartet seit X Tagen"-Badge.
+- **Wochenrückblick-Digest**: Ein wöchentlicher Cron-Job (freitags 08:00) verschickt die Wochenrückblick-Daten aller Nutzer:innen als HTML-Mail.
+- **Sprachnotiz**: Mikrofon-Button im Schnellerfassungsfeld nutzt die Web-Speech-API (`de-DE`), um gesprochenen Text direkt als Titel zu übernehmen. Wird ausgeblendet/deaktiviert, wenn der Browser die API nicht unterstützt.
+- **Kamera-Scan**: Kamera-Button (📷) im Schnellerfassungsfeld öffnet auf Mobilgeräten direkt die Rückkamera (`<input type="file" capture="environment">`). Das Foto wird clientseitig per Tesseract.js (deutsches Sprachpaket, dynamisch nachgeladen — kein Teil des Haupt-Bundles) per OCR ausgewertet; der erkannte Text (erste ~80 Zeichen) erscheint als bearbeitbarer Titel-Vorschlag. Beim Speichern wird zuerst das Item angelegt (`source=SCAN`) und danach das Foto per `POST /items/:id/attachment` als Anhang hochgeladen. Anhänge liegen serverseitig unter `UPLOADS_DIR` (Default `./uploads`) unter einem zufälligen Dateinamen und werden ausschließlich über die authentifizierte Route `GET /items/:id/attachment` ausgeliefert (kein öffentlicher Static-Mount), damit die Item-Sichtbarkeitsregeln greifen. In `docker-compose.yml` liegt `UPLOADS_DIR` auf dem benannten Volume `uploads_data`, damit Anhänge Container-Neustarts überleben.
+
+### SendGrid einrichten
+
+1. Im SendGrid-Konto eine **Inbound Parse**-Domain/-Subdomain einrichten (z. B. `inbound.deine-domain.tld`) und den MX-Eintrag entsprechend SendGrid-Anleitung setzen.
+2. Als Webhook-URL `https://<backend-host>/integrations/email/inbound?secret=<EMAIL_INBOUND_SECRET>` eintragen (POST, multipart/form-data — "Post the raw, full MIME message" kann deaktiviert bleiben, da nur `to`/`subject`/`text` ausgewertet werden).
+3. In `backend/.env` `SENDGRID_API_KEY`, `SENDGRID_FROM_EMAIL`, `EMAIL_INBOUND_SECRET` und `EMAIL_INBOUND_DOMAIN` (= die eingerichtete Inbound-Parse-Domain) setzen.
+4. Ohne gesetzten `SENDGRID_API_KEY` versendet `sendEmail()` keine echten Mails, sondern loggt nur eine Warnung — lokale Entwicklung funktioniert also auch ohne SendGrid-Account.
+
+> **Hinweis:** Die Cron-Jobs (Erinnerungen, Wochendigest) laufen im selben Node-Prozess wie der API-Server (`node-cron`, registriert in `backend/src/index.ts`, deaktiviert wenn `NODE_ENV=test`). Für den Produktivbetrieb bei höherer Last ist ein separater Worker-Prozess empfehlenswert, damit lang laufende Jobs den API-Server nicht beeinträchtigen.
+
+## Produktivhärtung
+
+- **Verschlüsselte Google-Tokens**: `accessToken`/`refreshToken` in `GoogleAccount` werden AES-256-GCM-verschlüsselt gespeichert (`backend/src/lib/crypto.ts`). Erforderlich: `GOOGLE_TOKEN_ENCRYPTION_KEY` in `.env` (32 Byte, hex-kodiert — generieren mit `openssl rand -hex 32`). Ohne diesen Key schlägt jede Google-Verbindung/-Nutzung fehl statt Klartext-Tokens zu speichern.
+- **Rate-Limiting für `/api/v1`**: 300 Requests / 15 Minuten pro API-Key (Fallback: IP), via `express-rate-limit` (`backend/src/routes/apiV1.ts`). Antworten enthalten die Standard-`RateLimit-*`-Header.
+- **Brute-Force-Schutz für `/auth/login`**: 10 Versuche / 15 Minuten pro IP+E-Mail-Kombination (`backend/src/routes/auth.ts`).
+- **Refresh-Token-Rotation**: Login/Registrierung setzen zwei Cookies — ein kurzlebiges Access-Token (`token`, 15 Min., JWT) und ein Refresh-Token (`refreshToken`, 30 Tage, zufälliger Wert, nur gehasht in der DB gespeichert, Cookie-Pfad `/auth`). `POST /auth/refresh` rotiert das Refresh-Token bei jeder Nutzung (Single-Use); wird ein bereits verwendetes/rotiertes Token erneut vorgelegt, gilt das als Diebstahlsignal und alle Refresh-Tokens der/des Nutzer:in werden widerrufen. Der Frontend-API-Client (`frontend/src/lib/api.ts`) ruft `/auth/refresh` transparent bei einem 401 auf und wiederholt den ursprünglichen Request einmal.
+- **E-Mail-Verifizierung**: Bei der Registrierung wird automatisch eine Bestätigungsmail mit Link zu `/verify-email?token=...` verschickt (`POST /auth/verify-email`). Unbestätigte Accounts können sich weiterhin einloggen und die App nutzen (kein Hard-Block, um die Ersteinrichtung nicht zu blockieren), sehen aber im UI einen Hinweisbanner mit "Erneut senden"-Option (`POST /auth/resend-verification`).
+
+## Build & Typecheck
+
+```bash
+# Backend
+cd backend && npx tsc --noEmit
+
+# Frontend
+cd frontend && npm run build
+```
+
+## Tests
+
+Backend-Tests (vitest + supertest) laufen gegen eine echte, separate Postgres-Testdatenbank (kein Mocking der DB) und decken Auth, Items-CRUD/Berechtigungen, Idee→Aufgabe-Konvertierung, Weekly Review, E-Mail-Inbound und die Cron-Job-Kernfunktionen ab — inklusive Regressionstests dafür, dass `passwordHash`/`emailInboundToken` nie in API-Antworten landen.
+
+```bash
+# Backend: einmalig eine Testdatenbank anlegen und Migrationen darauf anwenden
+createdb nisorga_test
+cd backend
+DATABASE_URL="postgresql://<user>:<pass>@localhost:5432/nisorga_test?schema=public" npx prisma migrate deploy
+
+# Backend-Tests ausführen
+DATABASE_URL="postgresql://<user>:<pass>@localhost:5432/nisorga_test?schema=public" NODE_ENV=test npm test
+
+# Frontend: Unit- und UI-Komponententests (Vitest + jsdom + React Testing Library)
+cd frontend && npm test
+```
+
+Die Frontend-Testsuite (`cd frontend && npm test`) deckt neben der reinen Logik (`src/lib/waiting.test.ts`) jetzt auch UI-Komponententests mit Vitest + jsdom + React Testing Library ab: `AuthContext`, `ProtectedRoute`, `QuickCapture`, `useSpeechRecognition`, `ItemDetail` und `Login`. Der API-Client (`src/lib/api.ts`) wird darin per `vi.mock` ersetzt — es finden keine echten Netzwerkaufrufe statt.
+
+## E2E-Tests
+
+End-to-End-Tests mit [Playwright](https://playwright.dev/) liegen in `frontend/e2e/` und decken die zentralen Nutzerflüsse ab: Registrierung/Login/Logout (`auth.spec.ts`), Schnellerfassung → Konvertierung zu Aufgabe → "Wartet auf Rückmeldung" (`quick-capture-to-task.spec.ts`) sowie den Wochenrückblick (`review.spec.ts`). Jeder Testlauf verwendet eine frisch generierte, eindeutige E-Mail-Adresse pro Test, daher ist kein globaler DB-Reset nötig.
+
+Setup:
+
+```bash
+cd frontend
+npx playwright install --with-deps chromium
+```
+
+Voraussetzung: `backend/.env` muss vollständig ausgefüllt sein (siehe `backend/.env.example`), insbesondere `JWT_SECRET`, `EMAIL_INBOUND_SECRET` und `GOOGLE_TOKEN_ENCRYPTION_KEY` — ohne diese startet das Backend nicht. Für die E2E-Tests genügt die normale (nicht die Test-)Datenbank aus dem Setup-Abschnitt oben, solange die Migrationen angewendet wurden (`npx prisma migrate deploy`).
+
+`frontend/playwright.config.ts` startet Backend (`npm run dev` in `../backend`, Port 4000) und Frontend (`npm run dev`, Port 5173) automatisch über die `webServer`-Option (Array mit zwei Einträgen), sofern sie nicht schon laufen (`reuseExistingServer: !process.env.CI`). Ein manueller Start in zwei Terminals ist daher nicht nötig, funktioniert aber genauso — Playwright erkennt bereits laufende Server auf den konfigurierten Ports und startet sie dann nicht erneut.
+
+```bash
+cd frontend
+npx playwright test
+```
+
+## Offene Punkte / TODO
+
+- E-Mail-Verifizierung ist derzeit ein Soft-Gate (kein Login-Block); je nach Compliance-Anforderung ggf. auf Hard-Gate umstellen.
+
+## Proxmox VE Deployment
+
+Für den Betrieb auf einem eigenen Proxmox-VE-Host liegen unter [`scripts/`](scripts/) zwei unabhängige, in der **Proxmox-Shell** ausführbare Skripte:
+
+### 1. Host-Vorbereitung (optional)
+
+`scripts/proxmox-host-setup.sh` bereitet einen frisch installierten Proxmox-VE-Host für den produktiven Einsatz vor: Enterprise-Repo deaktivieren und `pve-no-subscription`-Repo einrichten, System aktualisieren, das Abo-Popup dauerhaft entfernen, gängige CLI-Tools installieren, Zeitzone/NTP konfigurieren. Idempotent, mit `--dry-run`, `--yes` und `--skip-*`-Flags.
 
 ```bash
 sudo ./scripts/proxmox-host-setup.sh --help
-sudo ./scripts/proxmox-host-setup.sh --dry-run          # zeigt nur, was gemacht würde
-sudo ./scripts/proxmox-host-setup.sh --yes               # ohne Rückfragen durchlaufen
-sudo ./scripts/proxmox-host-setup.sh --timezone Europe/Berlin
+sudo ./scripts/proxmox-host-setup.sh --yes
 ```
 
-Einzelne Schritte lassen sich mit `--skip-repo`, `--skip-update`, `--skip-nag`, `--skip-tools` bzw. `--skip-time` überspringen.
+### 2. Nisorga in einem LXC-Container installieren
 
-Ein Log der ausgeführten Schritte wird zusätzlich unter `/var/log/proxmox-host-setup.log` abgelegt.
-
-## Nisorga-Installation (LXC-Container)
-
-`scripts/nisorga-lxc-install.sh` wird **in der Proxmox-VE-Shell** (als root auf dem Proxmox-Host) ausgeführt. Es legt einen neuen unprivilegierten LXC-Container an und installiert darin die Anwendung aus diesem Repository (`scripts/nisorga-app-install.sh` wird dafür in den Container übertragen und dort ausgeführt).
-
-Der Installer erkennt den Anwendungs-Stack automatisch anhand vorhandener Dateien im Repo:
-
-- `docker-compose.yml` / `compose.yml` → installiert Docker und startet `docker compose up -d --build`
-- `package.json` → installiert Node.js, führt `npm install`/`npm run build` aus und legt einen systemd-Service `nisorga` an
-- `requirements.txt` / `pyproject.toml` → installiert Python in einem venv unter `/opt/nisorga/.venv`
-- `Dockerfile` (ohne Compose) → baut das Image `nisorga:latest`
-- Ist nichts davon vorhanden (aktuell der Fall, das Repo enthält noch keine Anwendung), wird das Repository nach `/opt/nisorga` geklont und eine entsprechende Meldung ausgegeben.
-
-### Verwendung
-
-Direkt in der Proxmox-Shell, ohne vorheriges Klonen:
+`scripts/nisorga-lxc-install.sh` legt einen neuen unprivilegierten LXC-Container an, klont dieses Repository hinein und installiert die Anwendung (über `scripts/nisorga-app-install.sh`, das dafür in den Container übertragen wird). Da dieses Repo ein `docker-compose.yml` enthält, wird automatisch Docker installiert und `docker compose up -d --build` ausgeführt — inklusive automatisch generierter `.env`/`backend/.env` mit zufälligen Secrets, falls diese noch nicht existieren (siehe [docs/deployment.md](docs/deployment.md) für die manuelle Variante mit Nginx Proxy Manager).
 
 ```bash
+# Direkt in der Proxmox-Shell, ohne vorheriges Klonen:
 bash <(curl -fsSL https://raw.githubusercontent.com/Wakko97/nisorga/main/scripts/nisorga-lxc-install.sh)
-```
 
-Oder mit lokal ausgecheckstem Repo:
-
-```bash
+# Oder mit lokal ausgecheckstem Repo:
 sudo ./scripts/nisorga-lxc-install.sh --help
-sudo ./scripts/nisorga-lxc-install.sh --yes
-sudo ./scripts/nisorga-lxc-install.sh --ctid 105 --hostname nisorga --storage local-lvm --ip 192.168.1.50/24 --gateway 192.168.1.1
+sudo ./scripts/nisorga-lxc-install.sh --yes --ip 192.168.1.50/24 --gateway 192.168.1.1
 ```
 
-Wichtige Optionen: `--ctid`, `--hostname`, `--storage`, `--bridge`, `--ip` (`dhcp` oder CIDR + `--gateway`), `--cores`, `--memory`, `--swap`, `--disk`, `--password`, `--branch`, `--privileged`, `--dry-run`.
+Wichtige Optionen: `--ctid`, `--hostname`, `--storage`, `--bridge`, `--ip` (`dhcp` oder CIDR + `--gateway`), `--cores`, `--memory`, `--swap`, `--disk`, `--password`, `--branch`, `--privileged`, `--dry-run`. Am Ende gibt das Skript die Container-ID sowie das (ggf. generierte) Root-Passwort aus; Einstieg mit `pct enter <CTID>`.
 
-Am Ende gibt das Skript die Container-ID sowie (falls generiert) das Root-Passwort aus. Einstieg in den Container: `pct enter <CTID>`.
+**Wichtig:** Google-Kalender- und SendGrid-Integration werden dabei bewusst NICHT automatisch konfiguriert (siehe [Google-Kalender-Integration einrichten](#google-kalender-integration-einrichten) und [SendGrid einrichten](#sendgrid-einrichten)) — dafür in `backend/.env` im Container (`/opt/nisorga/backend/.env`) nachtragen und `docker compose restart backend` ausführen. Ebenso ist standardmäßig kein Port für das Frontend nach außen freigegeben (siehe [docs/deployment.md](docs/deployment.md), Abschnitt zu `docker-compose.yml`) — für direkten Zugriff ohne eigenen Reverse Proxy den auskommentierten `ports`-Block beim `frontend`-Service in `docker-compose.yml` aktivieren.
