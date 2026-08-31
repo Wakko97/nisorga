@@ -137,3 +137,27 @@ export async function fetchAttachmentUrl(itemId: string): Promise<string> {
   const blob = await res.blob();
   return URL.createObjectURL(blob);
 }
+
+/**
+ * Downloads a cookie-authenticated file (e.g. a CSV export) and saves it via
+ * the browser — a plain <a href> can't carry the session cookie reliably
+ * cross-origin, so the bytes are fetched first and handed to the browser as
+ * a blob: URL, same pattern as fetchAttachmentUrl above.
+ */
+export async function downloadFile(path: string, fallbackFilename: string): Promise<void> {
+  const res = await fetch(`${API_URL}${path}`, { credentials: "include" });
+  if (!res.ok) throw new ApiError(res.status, res.statusText);
+  const blob = await res.blob();
+  const disposition = res.headers.get("Content-Disposition") ?? "";
+  const match = disposition.match(/filename="([^"]+)"/);
+  const filename = match?.[1] ?? fallbackFilename;
+
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}

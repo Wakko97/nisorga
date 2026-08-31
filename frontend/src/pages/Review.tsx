@@ -1,6 +1,7 @@
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { api } from "../lib/api";
+import { api, downloadFile } from "../lib/api";
 import { Item, User, WeeklyReview } from "../lib/types";
 
 function ItemActions({ item, users }: { item: Item; users: User[] | undefined }) {
@@ -89,7 +90,7 @@ function ReviewSection({
                 fällig {new Date(item.dueDate).toLocaleDateString()}
               </span>
             )}
-            <div className="mt-2">
+            <div className="mt-2 print:hidden">
               <ItemActions item={item} users={users} />
             </div>
           </li>
@@ -105,12 +106,32 @@ export default function Review() {
     queryFn: () => api.get("/review/weekly"),
   });
   const { data: users } = useQuery<User[]>({ queryKey: ["users"], queryFn: () => api.get("/users") });
+  const [exporting, setExporting] = useState(false);
 
   if (isLoading || !data) return <p className="text-gray-500">Lädt…</p>;
 
+  async function exportCsv() {
+    setExporting(true);
+    try {
+      await downloadFile("/review/weekly/export.csv", "wochenrueckblick.csv");
+    } finally {
+      setExporting(false);
+    }
+  }
+
   return (
     <div className="space-y-6 max-w-3xl">
-      <h1 className="text-2xl font-bold tracking-tight">Wochenrückblick</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-bold tracking-tight">Wochenrückblick</h1>
+        <div className="flex gap-2 print:hidden">
+          <button onClick={exportCsv} disabled={exporting} className="btn-secondary text-sm px-3 py-1.5 min-h-0">
+            {exporting ? "…" : "Als CSV exportieren"}
+          </button>
+          <button onClick={() => window.print()} className="btn-secondary text-sm px-3 py-1.5 min-h-0">
+            Drucken / als PDF speichern
+          </button>
+        </div>
+      </div>
       <ReviewSection
         title="Offene Inbox-Punkte"
         hint="Noch nicht sortierte Ideen und Aufgaben."

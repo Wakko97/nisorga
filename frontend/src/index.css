@@ -14,6 +14,13 @@ body {
   --safe-right: env(safe-area-inset-right, 0px);
 }
 
+@media print {
+  header,
+  nav {
+    display: none !important;
+  }
+}
+
 @layer components {
   /* Buttons */
   .btn {

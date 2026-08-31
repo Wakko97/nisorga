@@ -50,4 +50,39 @@ router.get("/weekly", async (req, res) => {
   res.json(data);
 });
 
+function csvEscape(value: string): string {
+  return `"${value.replace(/"/g, '""')}"`;
+}
+
+const CSV_COLUMNS = ["Kategorie", "Titel", "Status", "Zugewiesen", "Fällig", "Erstellt"] as const;
+
+router.get("/weekly/export.csv", async (req, res) => {
+  const data = await getWeeklyReviewData(req.user!);
+
+  const rows: string[][] = [];
+  const section = (label: string, items: typeof data.openInboxItems) => {
+    for (const item of items) {
+      rows.push([
+        label,
+        item.title,
+        item.status,
+        item.assignedTo?.name ?? "",
+        item.dueDate ? new Date(item.dueDate).toLocaleDateString("de-DE") : "",
+        new Date(item.createdAt).toLocaleDateString("de-DE"),
+      ]);
+    }
+  };
+  section("Offener Inbox-Punkt", data.openInboxItems);
+  section("Überfällige Aufgabe", data.overdueTasks);
+  section("Unbearbeitete Idee", data.staleIdeas);
+
+  const csv = [CSV_COLUMNS, ...rows].map((r) => r.map(csvEscape).join(",")).join("\r\n");
+  const dateStamp = new Date().toISOString().slice(0, 10);
+
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader("Content-Disposition", `attachment; filename="wochenrueckblick-${dateStamp}.csv"`);
+  // Leading BOM so Excel detects UTF-8 instead of mangling umlauts.
+  res.send("﻿" + csv);
+});
+
 export default router;

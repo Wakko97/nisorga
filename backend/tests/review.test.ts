@@ -47,4 +47,15 @@ describe("weekly review", () => {
     const item = res.body.openInboxItems[0];
     expect(item.createdBy.passwordHash).toBeUndefined();
   });
+
+  it("exports the weekly review as a downloadable CSV", async () => {
+    await request(app).post("/items").set("Cookie", ownerCookie).send({ title: "CSV-Idee" });
+
+    const res = await request(app).get("/review/weekly/export.csv").set("Cookie", ownerCookie);
+    expect(res.status).toBe(200);
+    expect(res.headers["content-type"]).toMatch(/text\/csv/);
+    expect(res.headers["content-disposition"]).toMatch(/attachment; filename="wochenrueckblick-/);
+    expect(res.text).toContain('"Kategorie","Titel","Status","Zugewiesen","Fällig","Erstellt"');
+    expect(res.text).toContain("CSV-Idee");
+  });
 });
