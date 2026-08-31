@@ -30,9 +30,11 @@ export default function Register() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <form onSubmit={handleSubmit} className="w-full max-w-sm bg-white p-6 rounded-lg shadow border">
-        <h1 className="text-xl font-semibold mb-4">Registrieren</h1>
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-brand-50 via-surface-muted to-brand-100 px-4">
+      <div className="w-full max-w-sm">
+        <p className="text-center font-extrabold text-2xl tracking-tight text-brand-700 mb-6">Nisorga</p>
+        <form onSubmit={handleSubmit} className="card p-7">
+        <h1 className="text-xl font-bold tracking-tight mb-1 text-gray-900">Registrieren</h1>
         {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
         <label htmlFor="register-name" className="block text-sm mb-1">Name</label>
         <input
@@ -40,7 +42,7 @@ export default function Register() {
           value={name}
           onChange={(e) => setName(e.target.value)}
           required
-          className="w-full border rounded px-3 py-2 mb-3"
+          className="input mb-3"
         />
         <label htmlFor="register-email" className="block text-sm mb-1">E-Mail</label>
         <input
@@ -49,7 +51,7 @@ export default function Register() {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           required
-          className="w-full border rounded px-3 py-2 mb-3"
+          className="input mb-3"
         />
         <label htmlFor="register-password" className="block text-sm mb-1">Passwort</label>
         <input
@@ -59,30 +61,31 @@ export default function Register() {
           onChange={(e) => setPassword(e.target.value)}
           required
           minLength={8}
-          className="w-full border rounded px-3 py-2 mb-4"
+          className="input mb-4"
         />
         <button
           type="submit"
           disabled={loading}
-          className="w-full bg-gray-900 text-white rounded py-2 hover:bg-gray-800 disabled:opacity-50"
+          className="btn-primary w-full"
         >
           {loading ? "…" : "Registrieren"}
         </button>
         <p className="text-sm text-gray-500 mt-3">
           Schon registriert?{" "}
-          <Link to="/login" className="underline">
+          <Link to="/login" className="text-brand-700 font-medium hover:underline">
             Anmelden
           </Link>
         </p>
         {setupStatus?.initialized === false && (
           <p className="text-sm text-gray-500 mt-2">
             Erststart?{" "}
-            <Link to="/setup" className="underline">
+            <Link to="/setup" className="text-brand-700 font-medium hover:underline">
               Zur Einrichtung
             </Link>
           </p>
         )}
-      </form>
+        </form>
+      </div>
     </div>
   );
 }

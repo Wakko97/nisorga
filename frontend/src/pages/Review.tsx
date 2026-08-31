@@ -20,20 +20,20 @@ function ItemActions({ item, users }: { item: Item; users: User[] | undefined })
     <div className="flex flex-wrap items-center gap-2 text-xs">
       <button
         onClick={() => updateItem.mutate({ important: true, urgent: true })}
-        className="px-3 py-2 min-h-[44px] rounded border hover:bg-gray-100"
+        className="btn-secondary text-xs px-2.5 py-1.5 min-h-0"
       >
         Wichtig &amp; dringend
       </button>
       <button
         onClick={() => updateItem.mutate({ important: true, urgent: false })}
-        className="px-3 py-2 min-h-[44px] rounded border hover:bg-gray-100"
+        className="btn-secondary text-xs px-2.5 py-1.5 min-h-0"
       >
         Nur wichtig
       </button>
       {item.type === "IDEA" && (
         <button
           onClick={() => convertItem.mutate()}
-          className="px-3 py-2 min-h-[44px] rounded border hover:bg-gray-100"
+          className="btn-secondary text-xs px-2.5 py-1.5 min-h-0"
         >
           Zu Aufgabe konvertieren
         </button>
@@ -41,7 +41,7 @@ function ItemActions({ item, users }: { item: Item; users: User[] | undefined })
       <select
         value={item.assignedToId ?? ""}
         onChange={(e) => updateItem.mutate({ assignedToId: e.target.value || null })}
-        className="border rounded px-1.5 py-1"
+        className="select w-auto text-xs px-2 py-1.5 min-h-0"
       >
         <option value="">Nicht zugewiesen</option>
         {users?.map((u) => (
@@ -52,7 +52,7 @@ function ItemActions({ item, users }: { item: Item; users: User[] | undefined })
       </select>
       <button
         onClick={() => updateItem.mutate({ status: "DONE" })}
-        className="px-2 py-1 rounded border border-gray-300 hover:bg-gray-100"
+        className="btn-ghost text-xs px-2 py-1 min-h-0 border border-gray-200"
       >
         Archivieren
       </button>
@@ -72,7 +72,7 @@ function ReviewSection({
   users: User[] | undefined;
 }) {
   return (
-    <section className="bg-white border rounded-lg p-4">
+    <section className="panel">
       <h2 className="font-semibold mb-1">
         {title} <span className="text-gray-400 font-normal text-sm">({items.length})</span>
       </h2>
@@ -80,8 +80,8 @@ function ReviewSection({
       {items.length === 0 && <p className="text-sm text-gray-500">Nichts zu tun 🎉</p>}
       <ul className="space-y-3">
         {items.map((item) => (
-          <li key={item.id} className="border-t pt-3">
-            <Link to={`/items/${item.id}`} className="font-medium hover:underline">
+          <li key={item.id} className="border-t border-gray-100 pt-3">
+            <Link to={`/items/${item.id}`} className="font-medium hover:text-brand-700 hover:underline">
               {item.title}
             </Link>
             {item.dueDate && (
@@ -110,7 +110,7 @@ export default function Review() {
 
   return (
     <div className="space-y-6 max-w-3xl">
-      <h1 className="text-2xl font-semibold">Wochenrückblick</h1>
+      <h1 className="text-2xl font-bold tracking-tight">Wochenrückblick</h1>
       <ReviewSection
         title="Offene Inbox-Punkte"
         hint="Noch nicht sortierte Ideen und Aufgaben."

@@ -16,9 +16,9 @@ import { daysSince, isWaitingOverdue } from "../lib/waiting";
 import { useAuth } from "../context/AuthContext";
 
 const QUADRANTS: { key: string; important: boolean; urgent: boolean; label: string; color: string }[] = [
-  { key: "do", important: true, urgent: true, label: "Wichtig & Dringend — Sofort erledigen", color: "bg-red-50 border-red-200" },
-  { key: "plan", important: true, urgent: false, label: "Wichtig, nicht dringend — Planen", color: "bg-blue-50 border-blue-200" },
-  { key: "delegate", important: false, urgent: true, label: "Dringend, nicht wichtig — Delegieren", color: "bg-yellow-50 border-yellow-200" },
+  { key: "do", important: true, urgent: true, label: "Wichtig & Dringend — Sofort erledigen", color: "bg-red-50/60 border-red-200" },
+  { key: "plan", important: true, urgent: false, label: "Wichtig, nicht dringend — Planen", color: "bg-brand-50 border-brand-200" },
+  { key: "delegate", important: false, urgent: true, label: "Dringend, nicht wichtig — Delegieren", color: "bg-amber-50 border-amber-200" },
   { key: "drop", important: false, urgent: false, label: "Weder noch — Streichen/Später", color: "bg-gray-50 border-gray-200" },
 ];
 
@@ -34,13 +34,13 @@ function DraggableCard({ item, overdueDays }: { item: Item; overdueDays?: number
       style={{ ...style, touchAction: "none" }}
       {...listeners}
       {...attributes}
-      className="bg-white border rounded p-2 mb-2 shadow-sm cursor-grab active:cursor-grabbing touch-none"
+      className="card p-2.5 mb-2 cursor-grab active:cursor-grabbing touch-none hover:shadow-popover transition-shadow"
     >
-      <Link to={`/items/${item.id}`} onClick={(e) => e.stopPropagation()} className="text-sm hover:underline">
+      <Link to={`/items/${item.id}`} onClick={(e) => e.stopPropagation()} className="text-sm font-medium hover:text-brand-700 hover:underline">
         {item.title}
       </Link>
       {isWaitingOverdue(item.status, item.waitingSince, overdueDays) && (
-        <span className="block mt-1 text-xs px-1.5 py-0.5 rounded bg-red-100 text-red-700 w-fit">
+        <span className="badge-danger mt-1 w-fit">
           überfällig, wartet seit {daysSince(item.waitingSince!)} Tagen
         </span>
       )}
@@ -61,9 +61,9 @@ function Quadrant({
   return (
     <div
       ref={setNodeRef}
-      className={`border-2 rounded-lg p-3 min-h-[220px] ${quadrant.color} ${isOver ? "ring-2 ring-gray-900" : ""}`}
+      className={`border-2 rounded-xl p-3 min-h-[220px] transition-shadow ${quadrant.color} ${isOver ? "ring-2 ring-brand-500" : ""}`}
     >
-      <h3 className="text-sm font-semibold mb-2">{quadrant.label}</h3>
+      <h3 className="text-sm font-semibold mb-2 text-gray-700">{quadrant.label}</h3>
       {items.map((item) => (
         <DraggableCard key={item.id} item={item} overdueDays={overdueDays} />
       ))}
@@ -107,7 +107,7 @@ export default function Matrix() {
 
   return (
     <div>
-      <h1 className="text-2xl font-semibold mb-4">Eisenhower-Matrix</h1>
+      <h1 className="text-2xl font-bold tracking-tight mb-4">Eisenhower-Matrix</h1>
       <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {QUADRANTS.map((q) => (

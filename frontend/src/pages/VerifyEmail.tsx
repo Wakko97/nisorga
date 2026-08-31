@@ -24,21 +24,21 @@ export default function VerifyEmail() {
   }, [token]);
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
-      <div className="w-full max-w-sm rounded-lg bg-white p-6 text-center shadow">
-        {status === "pending" && <p>E-Mail-Adresse wird bestätigt…</p>}
+    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-brand-50 via-surface-muted to-brand-100 px-4">
+      <div className="w-full max-w-sm card p-7 text-center">
+        {status === "pending" && <p className="text-gray-600">E-Mail-Adresse wird bestätigt…</p>}
         {status === "success" && (
           <>
-            <p className="mb-4 text-green-700">Deine E-Mail-Adresse wurde bestätigt.</p>
-            <Link to="/inbox" className="text-blue-600 hover:underline">
+            <p className="mb-4 text-emerald-700 font-medium">Deine E-Mail-Adresse wurde bestätigt.</p>
+            <Link to="/inbox" className="text-brand-700 font-medium hover:underline">
               Weiter zur App
             </Link>
           </>
         )}
         {status === "error" && (
           <>
-            <p className="mb-4 text-red-700">{error}</p>
-            <Link to="/inbox" className="text-blue-600 hover:underline">
+            <p className="mb-4 text-red-700 font-medium">{error}</p>
+            <Link to="/inbox" className="text-brand-700 font-medium hover:underline">
               Zur App
             </Link>
           </>

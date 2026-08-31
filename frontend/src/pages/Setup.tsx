@@ -62,11 +62,11 @@ export default function Setup() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="w-full max-w-md bg-white p-6 rounded-lg shadow border">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-brand-50 via-surface-muted to-brand-100 px-4">
+      <div className="w-full max-w-md card p-7">
         {step === 1 && (
           <div>
-            <h1 className="text-xl font-semibold mb-4">Willkommen bei Nisorga</h1>
+            <h1 className="text-xl font-bold tracking-tight mb-4 text-gray-900">Willkommen bei Nisorga</h1>
             <p className="text-sm text-gray-600 mb-6">
               Nisorga hilft dir und deinem Team, Ideen und Aufgaben zu sammeln, zu priorisieren
               und im Blick zu behalten — von der Inbox über die Eisenhower-Matrix bis zum
@@ -74,7 +74,7 @@ export default function Setup() {
             </p>
             <button
               onClick={() => setStep(2)}
-              className="w-full bg-gray-900 text-white rounded py-2 hover:bg-gray-800"
+              className="btn-primary w-full"
             >
               Weiter
             </button>
@@ -83,11 +83,11 @@ export default function Setup() {
 
         {step === 2 && (
           <div>
-            <h1 className="text-xl font-semibold mb-4">Owner-Account anlegen</h1>
+            <h1 className="text-xl font-bold tracking-tight mb-4 text-gray-900">Owner-Account anlegen</h1>
             {alreadyInitialized ? (
               <p className="text-sm text-red-600 mb-3">
                 Die App wurde bereits eingerichtet.{" "}
-                <a href="/login" className="underline">
+                <a href="/login" className="text-brand-700 font-medium hover:underline">
                   Zum Login
                 </a>
               </p>
@@ -100,7 +100,7 @@ export default function Setup() {
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   required
-                  className="w-full border rounded px-3 py-2 mb-3"
+                  className="input mb-3"
                 />
                 <label htmlFor="setup-email" className="block text-sm mb-1">E-Mail</label>
                 <input
@@ -109,7 +109,7 @@ export default function Setup() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
-                  className="w-full border rounded px-3 py-2 mb-3"
+                  className="input mb-3"
                 />
                 <label htmlFor="setup-password" className="block text-sm mb-1">Passwort</label>
                 <input
@@ -119,12 +119,12 @@ export default function Setup() {
                   onChange={(e) => setPassword(e.target.value)}
                   required
                   minLength={8}
-                  className="w-full border rounded px-3 py-2 mb-4"
+                  className="input mb-4"
                 />
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full bg-gray-900 text-white rounded py-2 hover:bg-gray-800 disabled:opacity-50"
+                  className="btn-primary w-full"
                 >
                   {loading ? "…" : "Owner-Account anlegen"}
                 </button>
@@ -135,12 +135,12 @@ export default function Setup() {
 
         {step === 3 && (
           <div>
-            <h1 className="text-xl font-semibold mb-4">Server-Konfiguration</h1>
+            <h1 className="text-xl font-bold tracking-tight mb-4 text-gray-900">Server-Konfiguration</h1>
             <p className="text-sm text-gray-600 mb-3">
               Diese Einstellungen werden in der Umgebung des Servers (backend/.env) vorgenommen,
               nicht im Browser. Aktueller Status:
             </p>
-            <ul className="divide-y mb-6">
+            <ul className="divide-y divide-gray-100 mb-6">
               <CheckRow
                 ok={!!status?.env.sendgridConfigured}
                 label="E-Mail-Versand (SendGrid)"
@@ -159,7 +159,7 @@ export default function Setup() {
             </ul>
             <button
               onClick={finish}
-              className="w-full bg-gray-900 text-white rounded py-2 hover:bg-gray-800"
+              className="btn-primary w-full"
             >
               Fertig
             </button>

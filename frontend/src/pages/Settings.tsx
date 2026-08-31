@@ -77,9 +77,9 @@ export default function Settings() {
 
   return (
     <div className="space-y-8 max-w-2xl">
-      <h1 className="text-2xl font-semibold">Einstellungen</h1>
+      <h1 className="text-2xl font-bold tracking-tight">Einstellungen</h1>
 
-      <section className="bg-white border rounded-lg p-4">
+      <section className="panel">
         <h2 className="font-semibold mb-2">Google Kalender</h2>
         {googleParam === "connected" && (
           <p className="text-green-700 text-sm mb-2">Google Kalender wurde erfolgreich verbunden.</p>
@@ -92,19 +92,19 @@ export default function Settings() {
         </p>
         <button
           onClick={() => connectGoogle.mutate()}
-          className="text-sm px-3 py-1.5 rounded bg-gray-900 text-white"
+          className="btn-primary text-sm px-3 py-1.5 min-h-0"
         >
           {googleStatus?.connected ? "Neu verbinden" : "Google Kalender verbinden"}
         </button>
       </section>
 
-      <section className="bg-white border rounded-lg p-4">
+      <section className="panel">
         <h2 className="font-semibold mb-2">E-Mail-Erfassung</h2>
         <p className="text-sm mb-3">
           Sende eine E-Mail an diese Adresse, um sie automatisch als Idee in deiner Inbox zu erfassen:
         </p>
         <div className="flex gap-2 mb-2">
-          <code className="flex-1 border rounded px-3 py-1.5 text-sm bg-gray-50 overflow-x-auto">
+          <code className="flex-1 rounded-lg border border-gray-200 px-3 py-1.5 text-sm bg-gray-50 overflow-x-auto">
             {emailSettings?.address ?? "…"}
           </code>
           <button
@@ -115,13 +115,13 @@ export default function Settings() {
                 setTimeout(() => setCopied(false), 2000);
               }
             }}
-            className="text-sm px-3 py-1.5 rounded border border-gray-300 hover:bg-gray-100"
+            className="btn-secondary text-sm px-3 py-1.5 min-h-0"
           >
             {copied ? "Kopiert!" : "Kopieren"}
           </button>
           <button
             onClick={() => regenerateEmail.mutate()}
-            className="text-sm px-3 py-1.5 rounded border border-gray-300 hover:bg-gray-100"
+            className="btn-secondary text-sm px-3 py-1.5 min-h-0"
           >
             Neu generieren
           </button>
@@ -132,18 +132,18 @@ export default function Settings() {
         </p>
       </section>
 
-      <section className="bg-white border rounded-lg p-4">
+      <section className="panel">
         <h2 className="font-semibold mb-2">API-Keys</h2>
         <div className="flex gap-2 mb-3">
           <input
             value={newKeyLabel}
             onChange={(e) => setNewKeyLabel(e.target.value)}
             placeholder="Bezeichnung (z.B. Zapier)"
-            className="flex-1 border rounded px-3 py-2 min-h-[44px] text-sm"
+            className="input flex-1 text-sm"
           />
           <button
             onClick={() => newKeyLabel.trim() && createApiKey.mutate(newKeyLabel.trim())}
-            className="text-sm px-3 py-1.5 rounded bg-gray-900 text-white"
+            className="btn-primary text-sm px-3 py-1.5 min-h-0"
           >
             Erzeugen
           </button>
@@ -155,7 +155,7 @@ export default function Settings() {
         )}
         <ul className="space-y-1 text-sm">
           {apiKeys?.map((k) => (
-            <li key={k.id} className="flex items-center justify-between border-t py-1">
+            <li key={k.id} className="flex items-center justify-between border-t border-gray-100 py-2">
               <span>
                 {k.label} — erstellt {new Date(k.createdAt).toLocaleDateString()}
               </span>
@@ -167,18 +167,18 @@ export default function Settings() {
         </ul>
       </section>
 
-      <section className="bg-white border rounded-lg p-4">
+      <section className="panel">
         <h2 className="font-semibold mb-2">Webhooks</h2>
         <div className="flex gap-2 mb-2">
           <input
             value={webhookUrl}
             onChange={(e) => setWebhookUrl(e.target.value)}
             placeholder="https://example.com/webhook"
-            className="flex-1 border rounded px-3 py-2 min-h-[44px] text-sm"
+            className="input flex-1 text-sm"
           />
           <button
             onClick={() => webhookUrl && webhookEvents.length > 0 && createWebhook.mutate()}
-            className="text-sm px-3 py-1.5 rounded bg-gray-900 text-white"
+            className="btn-primary text-sm px-3 py-1.5 min-h-0"
           >
             Erzeugen
           </button>
@@ -201,7 +201,7 @@ export default function Settings() {
         </div>
         <ul className="space-y-1 text-sm">
           {webhooks?.map((w) => (
-            <li key={w.id} className="flex items-center justify-between border-t py-1">
+            <li key={w.id} className="flex items-center justify-between border-t border-gray-100 py-2">
               <span>
                 {w.url} — {w.events.join(", ")}
               </span>

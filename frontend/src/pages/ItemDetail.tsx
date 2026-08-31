@@ -109,7 +109,7 @@ export default function ItemDetail() {
 
   if (isError || !item) {
     return (
-      <div className="max-w-2xl bg-white border rounded-lg p-6">
+      <div className="max-w-2xl panel p-6">
         <p className="text-gray-700 mb-3">
           Dieses Item existiert nicht oder du hast keinen Zugriff darauf.
         </p>
@@ -121,7 +121,7 @@ export default function ItemDetail() {
   }
 
   return (
-    <div className="max-w-2xl bg-white border rounded-lg p-4 sm:p-6">
+    <div className="max-w-2xl panel p-4 sm:p-6">
       <div className="flex items-center justify-between gap-3 mb-4">
         <input
           value={titleDraft}
@@ -129,11 +129,11 @@ export default function ItemDetail() {
           onBlur={() => {
             if (titleDraft !== item.title) updateItem.mutate({ title: titleDraft });
           }}
-          className="text-xl font-semibold border-b border-transparent focus:border-gray-300 focus:outline-none flex-1 min-w-0 py-1"
+          className="text-xl font-bold tracking-tight border-b border-transparent focus:border-brand-300 focus:outline-none flex-1 min-w-0 py-1"
         />
         <button
           onClick={() => deleteItem.mutate()}
-          className="text-sm text-red-600 border border-red-200 rounded px-3 py-2 min-h-[44px] hover:bg-red-50 shrink-0"
+          className="btn bg-white text-red-600 border border-red-200 hover:bg-red-50 shrink-0"
         >
           Löschen
         </button>
@@ -146,7 +146,7 @@ export default function ItemDetail() {
           if (descriptionDraft !== (item.description ?? "")) updateItem.mutate({ description: descriptionDraft });
         }}
         placeholder="Beschreibung…"
-        className="w-full border rounded px-3 py-2 mb-4 text-sm"
+        className="input mb-4"
         rows={4}
       />
 
@@ -154,11 +154,11 @@ export default function ItemDetail() {
         <div>
           <label className="block mb-1 text-gray-600">Typ</label>
           <div className="flex items-center gap-2">
-            <span className="px-2 py-1 rounded bg-gray-100">{item.type === "IDEA" ? "Idee" : "Aufgabe"}</span>
+            <span className="badge-neutral">{item.type === "IDEA" ? "Idee" : "Aufgabe"}</span>
             {item.type === "IDEA" && (
               <button
                 onClick={() => convertItem.mutate()}
-                className="text-xs underline text-gray-600"
+                className="text-xs text-brand-700 hover:underline"
               >
                 zu Aufgabe konvertieren
               </button>
@@ -171,7 +171,7 @@ export default function ItemDetail() {
             id="item-status"
             value={item.status}
             onChange={(e) => updateItem.mutate({ status: e.target.value as Item["status"] })}
-            className="border rounded px-2 py-2 min-h-[44px] w-full"
+            className="select"
           >
             <option value="INBOX">Inbox</option>
             <option value="TODO">To-do</option>
@@ -190,7 +190,7 @@ export default function ItemDetail() {
           <select
             value={item.assignedToId ?? ""}
             onChange={(e) => updateItem.mutate({ assignedToId: e.target.value || null })}
-            className="border rounded px-2 py-2 min-h-[44px] w-full"
+            className="select"
           >
             <option value="">Nicht zugewiesen</option>
             {users?.map((u) => (
@@ -208,7 +208,7 @@ export default function ItemDetail() {
             onChange={(e) =>
               updateItem.mutate({ dueDate: e.target.value ? fromDatetimeLocalValue(e.target.value) : null })
             }
-            className="border rounded px-2 py-2 min-h-[44px] w-full"
+            className="select"
           />
         </div>
         <label className="flex items-center gap-2">
@@ -233,7 +233,7 @@ export default function ItemDetail() {
         <div className="mb-4">
           <button
             onClick={() => syncGoogle.mutate()}
-            className="text-sm px-3 py-1.5 rounded border border-gray-300 hover:bg-gray-100"
+            className="btn-secondary text-sm px-3 py-1.5 min-h-0"
           >
             {item.googleEventId ? "Google-Kalender-Event aktualisieren" : "Zu Google Kalender hinzufügen"}
           </button>
@@ -245,25 +245,25 @@ export default function ItemDetail() {
         <div className="mb-4">
           <label className="block mb-1 text-sm text-gray-600">Foto</label>
           {attachmentUrl ? (
-            <img src={attachmentUrl} alt="Angehängtes Foto" className="max-w-full max-h-96 rounded border" />
+            <img src={attachmentUrl} alt="Angehängtes Foto" className="max-w-full max-h-96 rounded-lg border border-gray-200" />
           ) : (
             <p className="text-sm text-gray-500">Foto wird geladen…</p>
           )}
           <button
             type="button"
             onClick={() => deleteAttachment.mutate()}
-            className="mt-2 text-sm text-red-600 border border-red-200 rounded px-2 py-1 hover:bg-red-50"
+            className="mt-2 text-sm text-red-600 border border-red-200 rounded-lg px-2 py-1 hover:bg-red-50"
           >
             Anhang löschen
           </button>
         </div>
       )}
 
-      <hr className="my-4" />
+      <hr className="my-4 border-gray-100" />
       <h2 className="font-semibold mb-2">Kommentare</h2>
       <ul className="space-y-2 mb-3">
         {comments?.map((c) => (
-          <li key={c.id} className="text-sm bg-gray-50 border rounded p-2">
+          <li key={c.id} className="text-sm bg-gray-50 border border-gray-100 rounded-lg p-2.5">
             <span className="font-medium">{c.author?.name}: </span>
             {c.body}
           </li>
@@ -280,9 +280,9 @@ export default function ItemDetail() {
           value={commentBody}
           onChange={(e) => setCommentBody(e.target.value)}
           placeholder="Kommentar hinzufügen…"
-          className="flex-1 border rounded px-3 py-2 min-h-[44px] text-sm"
+          className="input flex-1 text-sm"
         />
-        <button type="submit" className="text-sm px-3 py-1.5 rounded bg-gray-900 text-white">
+        <button type="submit" className="btn-primary text-sm px-3 py-1.5 min-h-0">
           Senden
         </button>
       </form>

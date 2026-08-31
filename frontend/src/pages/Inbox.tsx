@@ -39,7 +39,7 @@ export default function Inbox() {
 
   return (
     <div>
-      <h1 className="text-2xl font-semibold mb-4">Inbox</h1>
+      <h1 className="text-2xl font-bold tracking-tight mb-4">Inbox</h1>
       <QuickCapture />
 
       <BulkActionBar selectedIds={selected} users={users} onCleared={() => setSelected(new Set())} showConvert />
@@ -64,15 +64,15 @@ export default function Inbox() {
 
       <ul className="space-y-2">
         {items?.map((item) => (
-          <li key={item.id} className="bg-white border rounded-lg p-3 flex flex-wrap items-center gap-3">
+          <li key={item.id} className="card p-3 flex flex-wrap items-center gap-3">
             <input
               type="checkbox"
               checked={selected.has(item.id)}
               onChange={() => toggleSelected(item.id)}
               aria-label={`${item.title} auswählen`}
-              className="h-5 w-5 p-1.5 shrink-0"
+              className="h-5 w-5 p-1.5 shrink-0 accent-brand-600"
             />
-            <Link to={`/items/${item.id}`} className="font-medium hover:underline flex-1 min-w-[150px]">
+            <Link to={`/items/${item.id}`} className="font-medium hover:text-brand-700 hover:underline flex-1 min-w-[150px]">
               {item.title}
             </Link>
 
@@ -81,25 +81,27 @@ export default function Inbox() {
               onChange={(e) =>
                 updateItem.mutate({ id: item.id, data: { type: e.target.value as Item["type"] } })
               }
-              className="border rounded px-2 py-1.5 min-h-[36px] text-sm"
+              className="select py-1.5 min-h-[36px] text-sm w-auto"
             >
               <option value="IDEA">Idee</option>
               <option value="TASK">Aufgabe</option>
             </select>
 
-            <label className="flex items-center gap-1 text-sm">
+            <label className="flex items-center gap-1 text-sm text-gray-600">
               <input
                 type="checkbox"
                 checked={item.important}
                 onChange={(e) => updateItem.mutate({ id: item.id, data: { important: e.target.checked } })}
+                className="accent-brand-600"
               />
               wichtig
             </label>
-            <label className="flex items-center gap-1 text-sm">
+            <label className="flex items-center gap-1 text-sm text-gray-600">
               <input
                 type="checkbox"
                 checked={item.urgent}
                 onChange={(e) => updateItem.mutate({ id: item.id, data: { urgent: e.target.checked } })}
+                className="accent-brand-600"
               />
               dringend
             </label>
@@ -109,7 +111,7 @@ export default function Inbox() {
               onChange={(e) =>
                 updateItem.mutate({ id: item.id, data: { assignedToId: e.target.value || null } })
               }
-              className="border rounded px-2 py-1.5 min-h-[36px] text-sm"
+              className="select py-1.5 min-h-[36px] text-sm w-auto"
             >
               <option value="">Nicht zugewiesen</option>
               {users?.map((u) => (
@@ -126,7 +128,7 @@ export default function Inbox() {
                   data: { status: item.type === "TASK" ? "TODO" : "TODO" },
                 })
               }
-              className="text-sm px-2 py-1 rounded border border-gray-300 hover:bg-gray-100"
+              className="btn-ghost text-sm px-2 py-1 min-h-0 border border-gray-200"
             >
               Verschieben nach To-do
             </button>

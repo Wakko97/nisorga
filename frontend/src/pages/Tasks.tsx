@@ -12,7 +12,7 @@ const STATUSES: ItemStatus[] = ["TODO", "IN_PROGRESS", "WAITING", "DONE"];
 function WaitingBadge({ item, overdueDays }: { item: Item; overdueDays?: number }) {
   if (!isWaitingOverdue(item.status, item.waitingSince, overdueDays)) return null;
   return (
-    <span className="ml-2 inline-block text-xs px-1.5 py-0.5 rounded bg-red-100 text-red-700">
+    <span className="badge-danger ml-2">
       überfällig, wartet seit {daysSince(item.waitingSince!)} Tagen
     </span>
   );
@@ -56,7 +56,7 @@ export default function Tasks() {
 
   return (
     <div>
-      <h1 className="text-2xl font-semibold mb-4">Aufgaben</h1>
+      <h1 className="text-2xl font-bold tracking-tight mb-4">Aufgaben</h1>
 
       <BulkActionBar selectedIds={selected} users={users} onCleared={() => setSelected(new Set())} />
 
@@ -64,7 +64,7 @@ export default function Tasks() {
         <select
           value={status}
           onChange={(e) => setStatus(e.target.value)}
-          className="border rounded px-2 py-2 min-h-[44px]"
+          className="select w-auto"
         >
           <option value="">Alle Status</option>
           {STATUSES.map((s) => (
@@ -76,7 +76,7 @@ export default function Tasks() {
         <select
           value={assignedTo}
           onChange={(e) => setAssignedTo(e.target.value)}
-          className="border rounded px-2 py-2 min-h-[44px]"
+          className="select w-auto"
         >
           <option value="">Alle Zuweisungen</option>
           {users?.map((u) => (
@@ -88,47 +88,47 @@ export default function Tasks() {
       </div>
 
       <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
-        <table className="w-full min-w-[640px] bg-white border rounded-lg overflow-hidden text-sm">
-          <thead className="bg-gray-100 text-left">
+        <table className="w-full min-w-[640px] card overflow-hidden text-sm">
+          <thead className="bg-gray-50 text-left text-gray-500">
             <tr>
-              <th className="p-2 w-8">
+              <th className="p-2.5 w-8">
                 <input
                   type="checkbox"
                   checked={filtered.length > 0 && selected.size === filtered.length}
                   onChange={toggleAll}
                   aria-label="Alle auswählen"
-                  className="h-5 w-5 p-1"
+                  className="h-5 w-5 p-1 accent-brand-600"
                 />
               </th>
-              <th className="p-2">Titel</th>
-              <th className="p-2">Status</th>
-              <th className="p-2">Zugewiesen</th>
-              <th className="p-2">Fällig</th>
+              <th className="p-2.5 font-medium">Titel</th>
+              <th className="p-2.5 font-medium">Status</th>
+              <th className="p-2.5 font-medium">Zugewiesen</th>
+              <th className="p-2.5 font-medium">Fällig</th>
             </tr>
           </thead>
           <tbody>
             {filtered.map((item) => (
-              <tr key={item.id} className="border-t">
-                <td className="p-2">
+              <tr key={item.id} className="border-t border-gray-100 hover:bg-gray-50/60">
+                <td className="p-2.5">
                   <input
                     type="checkbox"
                     checked={selected.has(item.id)}
                     onChange={() => toggleSelected(item.id)}
                     aria-label={`${item.title} auswählen`}
-                    className="h-5 w-5 p-1.5"
+                    className="h-5 w-5 p-1.5 accent-brand-600"
                   />
                 </td>
-                <td className="p-2">
-                  <Link to={`/items/${item.id}`} className="hover:underline block py-1">
+                <td className="p-2.5">
+                  <Link to={`/items/${item.id}`} className="hover:text-brand-700 hover:underline block py-1 font-medium">
                     {item.title}
                   </Link>
                 </td>
-                <td className="p-2">
-                  {item.status}
+                <td className="p-2.5">
+                  <span className="badge-neutral">{item.status}</span>
                   <WaitingBadge item={item} overdueDays={user?.waitingReminderDays} />
                 </td>
-                <td className="p-2">{item.assignedTo?.name ?? "—"}</td>
-                <td className="p-2">{item.dueDate ? new Date(item.dueDate).toLocaleDateString() : "—"}</td>
+                <td className="p-2.5 text-gray-600">{item.assignedTo?.name ?? "—"}</td>
+                <td className="p-2.5 text-gray-600">{item.dueDate ? new Date(item.dueDate).toLocaleDateString() : "—"}</td>
               </tr>
             ))}
             {filtered.length === 0 && (
