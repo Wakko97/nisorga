@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "../lib/api";
 import { Item, User, Comment } from "../lib/types";
+import { toDatetimeLocalValue, fromDatetimeLocalValue } from "../lib/datetime";
 
 export default function ItemDetail() {
   const { id } = useParams<{ id: string }>();
@@ -177,8 +178,10 @@ export default function ItemDetail() {
           <label className="block mb-1 text-gray-600">Fällig am</label>
           <input
             type="datetime-local"
-            value={item.dueDate ? item.dueDate.slice(0, 16) : ""}
-            onChange={(e) => updateItem.mutate({ dueDate: e.target.value || null })}
+            value={item.dueDate ? toDatetimeLocalValue(item.dueDate) : ""}
+            onChange={(e) =>
+              updateItem.mutate({ dueDate: e.target.value ? fromDatetimeLocalValue(e.target.value) : null })
+            }
             className="border rounded px-2 py-1 w-full"
           />
         </div>
