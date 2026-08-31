@@ -3,12 +3,17 @@ import { prisma, publicUserSelect } from "../lib/prisma";
 import { requireAuth } from "../middleware/auth";
 import { fireWebhooks } from "../lib/webhooks";
 import { visibilityWhere, findItemForUser } from "../lib/itemAuthorization";
+import { RECURRENCE_RULES, nextOccurrence } from "../lib/recurrence";
 
 const router = Router();
 router.use(requireAuth);
 
 const VALID_TYPES = ["IDEA", "TASK"];
 const VALID_STATUSES = ["INBOX", "TODO", "IN_PROGRESS", "WAITING", "DONE"];
+
+function isValidRecurrenceRule(value: unknown): value is (typeof RECURRENCE_RULES)[number] | null {
+  return value === null || RECURRENCE_RULES.includes(value as any);
+}
 
 const itemInclude = {
   createdBy: { select: publicUserSelect },
@@ -42,8 +47,12 @@ router.get("/", async (req, res) => {
 
 router.post("/", async (req, res) => {
   const user = req.user!;
-  const { title, description, type, status, important, urgent, dueDate, assignedToId } = req.body ?? {};
+  const { title, description, type, status, important, urgent, dueDate, assignedToId, recurrenceRule } =
+    req.body ?? {};
   if (!title) return res.status(400).json({ error: "title is required" });
+  if (recurrenceRule !== undefined && !isValidRecurrenceRule(recurrenceRule)) {
+    return res.status(400).json({ error: "Invalid recurrenceRule" });
+  }
 
   const item = await prisma.item.create({
     data: {
@@ -57,6 +66,7 @@ router.post("/", async (req, res) => {
       waitingSince: status === "WAITING" ? new Date() : null,
       createdById: user.id,
       assignedToId: assignedToId ?? null,
+      recurrenceRule: recurrenceRule ?? null,
     },
   });
 
@@ -149,7 +159,11 @@ router.patch("/:id", async (req, res) => {
   if (existing === null) return res.status(404).json({ error: "Not found" });
   if (existing === "forbidden") return res.status(403).json({ error: "Forbidden" });
 
-  const { title, description, type, status, important, urgent, dueDate, assignedToId } = req.body ?? {};
+  const { title, description, type, status, important, urgent, dueDate, assignedToId, recurrenceRule } =
+    req.body ?? {};
+  if (recurrenceRule !== undefined && !isValidRecurrenceRule(recurrenceRule)) {
+    return res.status(400).json({ error: "Invalid recurrenceRule" });
+  }
 
   // Track when an item enters/leaves the WAITING (delegated, awaiting reply) state.
   let waitingSinceUpdate: { waitingSince: Date | null } | {} = {};
@@ -168,9 +182,38 @@ router.patch("/:id", async (req, res) => {
       ...(urgent !== undefined ? { urgent } : {}),
       ...(dueDate !== undefined ? { dueDate: dueDate ? new Date(dueDate) : null } : {}),
       ...(assignedToId !== undefined ? { assignedToId } : {}),
+      ...(recurrenceRule !== undefined ? { recurrenceRule } : {}),
       ...waitingSinceUpdate,
     },
   });
+
+  // A recurring task that just got marked DONE spawns its next occurrence
+  // immediately (rather than via a separate cron pass) so the user sees it
+  // right away; only fires on the INTO-DONE transition, not e.g. re-saving
+  // an already-done recurring task.
+  if (
+    status === "DONE" &&
+    existing.status !== "DONE" &&
+    item.type === "TASK" &&
+    item.recurrenceRule &&
+    RECURRENCE_RULES.includes(item.recurrenceRule as any)
+  ) {
+    const base = item.dueDate ?? new Date();
+    await prisma.item.create({
+      data: {
+        title: item.title,
+        description: item.description,
+        type: "TASK",
+        status: "TODO",
+        important: item.important,
+        urgent: item.urgent,
+        dueDate: nextOccurrence(item.recurrenceRule as any, base),
+        createdById: item.createdById,
+        assignedToId: item.assignedToId,
+        recurrenceRule: item.recurrenceRule,
+      },
+    });
+  }
 
   fireWebhooks(user.id, "item.updated", item);
   res.json(item);

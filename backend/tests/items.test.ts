@@ -244,4 +244,54 @@ describe("bulk item operations", () => {
       expect.objectContaining({ id: b.body.id })
     );
   });
+
+  it("attaches and detaches tags on an item", async () => {
+    const created = await request(app).post("/items").set("Cookie", ownerCookie).send({ title: "Getaggt" });
+    const tag = await request(app).post("/tags").set("Cookie", ownerCookie).send({ name: "Finanzen" });
+    expect(tag.status).toBe(201);
+
+    const attached = await request(app)
+      .post(`/items/${created.body.id}/tags`)
+      .set("Cookie", ownerCookie)
+      .send({ tagId: tag.body.id });
+    expect(attached.status).toBe(201);
+    expect(attached.body.tags).toHaveLength(1);
+    expect(attached.body.tags[0].tag.name).toBe("Finanzen");
+
+    const filtered = await request(app).get(`/items?tagId=${tag.body.id}`).set("Cookie", ownerCookie);
+    expect(filtered.body).toHaveLength(1);
+
+    const detached = await request(app)
+      .delete(`/items/${created.body.id}/tags/${tag.body.id}`)
+      .set("Cookie", ownerCookie);
+    expect(detached.status).toBe(200);
+    expect(detached.body.tags).toHaveLength(0);
+  });
+
+  it("spawns the next occurrence when a recurring task is marked DONE", async () => {
+    const created = await request(app)
+      .post("/items")
+      .set("Cookie", ownerCookie)
+      .send({ title: "Wöchentlicher Report", type: "TASK", recurrenceRule: "WEEKLY", dueDate: "2026-01-01T00:00:00.000Z" });
+    expect(created.status).toBe(201);
+
+    const done = await request(app)
+      .patch(`/items/${created.body.id}`)
+      .set("Cookie", ownerCookie)
+      .send({ status: "DONE" });
+    expect(done.status).toBe(200);
+
+    const all = await request(app).get("/items").set("Cookie", ownerCookie);
+    const next = all.body.find((i: any) => i.id !== created.body.id && i.title === "Wöchentlicher Report");
+    expect(next).toBeDefined();
+    expect(next.status).toBe("TODO");
+    expect(next.recurrenceRule).toBe("WEEKLY");
+    expect(new Date(next.dueDate).toISOString()).toBe("2026-01-08T00:00:00.000Z");
+
+    // Re-saving the already-done item must not spawn a duplicate.
+    await request(app).patch(`/items/${created.body.id}`).set("Cookie", ownerCookie).send({ status: "DONE" });
+    const allAfter = await request(app).get("/items").set("Cookie", ownerCookie);
+    const occurrences = allAfter.body.filter((i: any) => i.title === "Wöchentlicher Report");
+    expect(occurrences).toHaveLength(2);
+  });
 });

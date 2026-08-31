@@ -231,6 +231,27 @@ export default function ItemDetail() {
             className="input"
           />
         </div>
+        {item.type === "TASK" && (
+          <div>
+            <label htmlFor="item-recurrence" className="block mb-1 text-gray-600">Wiederholung</label>
+            <select
+              id="item-recurrence"
+              value={item.recurrenceRule ?? ""}
+              onChange={(e) => updateItem.mutate({ recurrenceRule: e.target.value || null })}
+              className="select"
+            >
+              <option value="">Keine Wiederholung</option>
+              <option value="DAILY">Täglich</option>
+              <option value="WEEKLY">Wöchentlich</option>
+              <option value="MONTHLY">Monatlich</option>
+            </select>
+            {item.recurrenceRule && (
+              <p className="text-xs text-gray-500 mt-1">
+                Bei Erledigung wird automatisch die nächste Aufgabe angelegt.
+              </p>
+            )}
+          </div>
+        )}
         <label className="flex items-center gap-2">
           <input
             type="checkbox"
