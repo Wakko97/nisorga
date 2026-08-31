@@ -154,6 +154,12 @@ pick_ctid() {
     fi
 }
 
+# Sets the global TEMPLATE_VOLID instead of returning via stdout: this
+# function shells out to 'pveam update'/'pveam download', whose own stdout
+# output ("update successful", download progress, ...) must never be mixed
+# into a captured return value - a $(ensure_template) command substitution
+# would silently swallow all of that output into the "return value" too.
+TEMPLATE_VOLID=""
 ensure_template() {
     log INFO "Updating LXC template index"
     run pveam update || log WARN "'pveam update' failed (offline or no subscription repo access?) - falling back to the cached template index / already-downloaded templates."
@@ -178,7 +184,7 @@ ensure_template() {
         log OK "Template $template already present on '$TEMPLATE_STORAGE'."
     fi
 
-    echo "$TEMPLATE_STORAGE:vztmpl/$template"
+    TEMPLATE_VOLID="$TEMPLATE_STORAGE:vztmpl/$template"
 }
 
 create_container() {
@@ -263,10 +269,8 @@ main() {
     log INFO "About to create LXC $CTID ($CT_HOSTNAME): $CORES vCPU, ${MEMORY}MB RAM, ${DISK}GB disk, storage=$STORAGE, bridge=$BRIDGE, ip=$IP"
     confirm "Proceed with container creation?" || { log WARN "Aborted by user."; exit 0; }
 
-    local template_volid
-    template_volid="$(ensure_template)"
-
-    create_container "$template_volid"
+    ensure_template
+    create_container "$TEMPLATE_VOLID"
     start_container_and_wait
     install_app
 
