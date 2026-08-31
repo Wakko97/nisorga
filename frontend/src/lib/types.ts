@@ -1,7 +1,7 @@
 export type Role = "OWNER" | "MEMBER";
 export type ItemType = "IDEA" | "TASK";
 export type ItemStatus = "INBOX" | "TODO" | "IN_PROGRESS" | "WAITING" | "DONE";
-export type ItemSource = "MANUAL" | "EMAIL" | "VOICE";
+export type ItemSource = "MANUAL" | "EMAIL" | "VOICE" | "SCAN";
 
 export interface User {
   id: string;
@@ -38,6 +38,7 @@ export interface Item {
   assignedToId: string | null;
   assignedTo?: User | null;
   googleEventId: string | null;
+  attachmentPath?: string | null;
   createdAt: string;
   updatedAt: string;
 }

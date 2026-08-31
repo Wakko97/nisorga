@@ -1,4 +1,13 @@
-import { DndContext, DragEndEvent, useDraggable, useDroppable } from "@dnd-kit/core";
+import {
+  DndContext,
+  DragEndEvent,
+  PointerSensor,
+  TouchSensor,
+  useDraggable,
+  useDroppable,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { api } from "../lib/api";
@@ -22,10 +31,10 @@ function DraggableCard({ item, overdueDays }: { item: Item; overdueDays?: number
   return (
     <div
       ref={setNodeRef}
-      style={style}
+      style={{ ...style, touchAction: "none" }}
       {...listeners}
       {...attributes}
-      className="bg-white border rounded p-2 mb-2 shadow-sm cursor-grab active:cursor-grabbing"
+      className="bg-white border rounded p-2 mb-2 shadow-sm cursor-grab active:cursor-grabbing touch-none"
     >
       <Link to={`/items/${item.id}`} onClick={(e) => e.stopPropagation()} className="text-sm hover:underline">
         {item.title}
@@ -75,6 +84,14 @@ export default function Matrix() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["items"] }),
   });
 
+  // PointerSensor covers mouse, touch and pen (incl. S-Pen) pointer input.
+  // TouchSensor is added explicitly with an activation delay so a finger/pen
+  // swipe used to scroll the page isn't immediately hijacked as a drag.
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 5 } })
+  );
+
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
     if (!over) return;
@@ -91,8 +108,8 @@ export default function Matrix() {
   return (
     <div>
       <h1 className="text-2xl font-semibold mb-4">Eisenhower-Matrix</h1>
-      <DndContext onDragEnd={handleDragEnd}>
-        <div className="grid grid-cols-2 gap-4">
+      <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {QUADRANTS.map((q) => (
             <Quadrant
               key={q.key}

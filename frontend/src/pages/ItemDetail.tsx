@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api, ApiError } from "../lib/api";
+import { api, apiFetch, ApiError, fetchAttachmentUrl } from "../lib/api";
 import { Item, User, Comment } from "../lib/types";
 import { toDatetimeLocalValue, fromDatetimeLocalValue } from "../lib/datetime";
 
@@ -13,6 +13,7 @@ export default function ItemDetail() {
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [titleDraft, setTitleDraft] = useState("");
   const [descriptionDraft, setDescriptionDraft] = useState("");
+  const [attachmentUrl, setAttachmentUrl] = useState<string | null>(null);
 
   const { data: item, isLoading, isError } = useQuery<Item>({
     queryKey: ["items", id],
@@ -33,6 +34,26 @@ export default function ItemDetail() {
       setDescriptionDraft(item.description ?? "");
     }
   }, [item?.id]);
+
+  // The attachment route is cookie-authenticated; a plain <img src> may not
+  // reliably send credentials cross-port/-origin, so the image bytes are
+  // fetched with credentials and shown via a local blob: URL instead.
+  useEffect(() => {
+    let objectUrl: string | null = null;
+    if (item?.attachmentPath && id) {
+      fetchAttachmentUrl(id)
+        .then((url) => {
+          objectUrl = url;
+          setAttachmentUrl(url);
+        })
+        .catch(() => setAttachmentUrl(null));
+    } else {
+      setAttachmentUrl(null);
+    }
+    return () => {
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [item?.attachmentPath, id]);
   const { data: users } = useQuery<User[]>({ queryKey: ["users"], queryFn: () => api.get("/users") });
   const { data: comments } = useQuery<Comment[]>({
     queryKey: ["comments", id],
@@ -60,6 +81,11 @@ export default function ItemDetail() {
       queryClient.invalidateQueries({ queryKey: ["items"] });
       navigate("/inbox");
     },
+  });
+
+  const deleteAttachment = useMutation({
+    mutationFn: () => apiFetch(`/items/${id}/attachment`, { method: "DELETE" }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["items"] }),
   });
 
   const addComment = useMutation({
@@ -95,19 +121,19 @@ export default function ItemDetail() {
   }
 
   return (
-    <div className="max-w-2xl bg-white border rounded-lg p-6">
-      <div className="flex items-center justify-between mb-4">
+    <div className="max-w-2xl bg-white border rounded-lg p-4 sm:p-6">
+      <div className="flex items-center justify-between gap-3 mb-4">
         <input
           value={titleDraft}
           onChange={(e) => setTitleDraft(e.target.value)}
           onBlur={() => {
             if (titleDraft !== item.title) updateItem.mutate({ title: titleDraft });
           }}
-          className="text-xl font-semibold border-b border-transparent focus:border-gray-300 focus:outline-none flex-1"
+          className="text-xl font-semibold border-b border-transparent focus:border-gray-300 focus:outline-none flex-1 min-w-0 py-1"
         />
         <button
           onClick={() => deleteItem.mutate()}
-          className="text-sm text-red-600 border border-red-200 rounded px-2 py-1 hover:bg-red-50 ml-3"
+          className="text-sm text-red-600 border border-red-200 rounded px-3 py-2 min-h-[44px] hover:bg-red-50 shrink-0"
         >
           Löschen
         </button>
@@ -124,7 +150,7 @@ export default function ItemDetail() {
         rows={4}
       />
 
-      <div className="grid grid-cols-2 gap-4 mb-4 text-sm">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4 text-sm">
         <div>
           <label className="block mb-1 text-gray-600">Typ</label>
           <div className="flex items-center gap-2">
@@ -145,7 +171,7 @@ export default function ItemDetail() {
             id="item-status"
             value={item.status}
             onChange={(e) => updateItem.mutate({ status: e.target.value as Item["status"] })}
-            className="border rounded px-2 py-1 w-full"
+            className="border rounded px-2 py-2 min-h-[44px] w-full"
           >
             <option value="INBOX">Inbox</option>
             <option value="TODO">To-do</option>
@@ -164,7 +190,7 @@ export default function ItemDetail() {
           <select
             value={item.assignedToId ?? ""}
             onChange={(e) => updateItem.mutate({ assignedToId: e.target.value || null })}
-            className="border rounded px-2 py-1 w-full"
+            className="border rounded px-2 py-2 min-h-[44px] w-full"
           >
             <option value="">Nicht zugewiesen</option>
             {users?.map((u) => (
@@ -182,7 +208,7 @@ export default function ItemDetail() {
             onChange={(e) =>
               updateItem.mutate({ dueDate: e.target.value ? fromDatetimeLocalValue(e.target.value) : null })
             }
-            className="border rounded px-2 py-1 w-full"
+            className="border rounded px-2 py-2 min-h-[44px] w-full"
           />
         </div>
         <label className="flex items-center gap-2">
@@ -215,6 +241,24 @@ export default function ItemDetail() {
         </div>
       )}
 
+      {item.attachmentPath && (
+        <div className="mb-4">
+          <label className="block mb-1 text-sm text-gray-600">Foto</label>
+          {attachmentUrl ? (
+            <img src={attachmentUrl} alt="Angehängtes Foto" className="max-w-full max-h-96 rounded border" />
+          ) : (
+            <p className="text-sm text-gray-500">Foto wird geladen…</p>
+          )}
+          <button
+            type="button"
+            onClick={() => deleteAttachment.mutate()}
+            className="mt-2 text-sm text-red-600 border border-red-200 rounded px-2 py-1 hover:bg-red-50"
+          >
+            Anhang löschen
+          </button>
+        </div>
+      )}
+
       <hr className="my-4" />
       <h2 className="font-semibold mb-2">Kommentare</h2>
       <ul className="space-y-2 mb-3">
@@ -236,7 +280,7 @@ export default function ItemDetail() {
           value={commentBody}
           onChange={(e) => setCommentBody(e.target.value)}
           placeholder="Kommentar hinzufügen…"
-          className="flex-1 border rounded px-3 py-1.5 text-sm"
+          className="flex-1 border rounded px-3 py-2 min-h-[44px] text-sm"
         />
         <button type="submit" className="text-sm px-3 py-1.5 rounded bg-gray-900 text-white">
           Senden

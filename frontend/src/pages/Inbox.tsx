@@ -1,11 +1,14 @@
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { api } from "../lib/api";
 import { Item, User } from "../lib/types";
 import QuickCapture from "../components/QuickCapture";
+import BulkActionBar from "../components/BulkActionBar";
 
 export default function Inbox() {
   const queryClient = useQueryClient();
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   const { data: items, isLoading } = useQuery<Item[]>({
     queryKey: ["items", { status: "INBOX" }],
     queryFn: () => api.get("/items?status=INBOX"),
@@ -20,19 +23,55 @@ export default function Inbox() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["items"] }),
   });
 
+  function toggleSelected(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleAll() {
+    if (!items) return;
+    setSelected((prev) => (prev.size === items.length ? new Set() : new Set(items.map((i) => i.id))));
+  }
+
   return (
     <div>
       <h1 className="text-2xl font-semibold mb-4">Inbox</h1>
       <QuickCapture />
+
+      <BulkActionBar selectedIds={selected} users={users} onCleared={() => setSelected(new Set())} showConvert />
 
       {isLoading && <p className="text-gray-500">Lädt…</p>}
       {items && items.length === 0 && (
         <p className="text-gray-500">Keine offenen Inbox-Einträge. Sehr gut aufgeräumt!</p>
       )}
 
+      {items && items.length > 0 && (
+        <label className="flex items-center gap-2 text-sm text-gray-600 mb-2 px-1">
+          <input
+            type="checkbox"
+            checked={selected.size === items.length}
+            onChange={toggleAll}
+            className="h-5 w-5 p-1"
+            aria-label="Alle auswählen"
+          />
+          Alle auswählen
+        </label>
+      )}
+
       <ul className="space-y-2">
         {items?.map((item) => (
           <li key={item.id} className="bg-white border rounded-lg p-3 flex flex-wrap items-center gap-3">
+            <input
+              type="checkbox"
+              checked={selected.has(item.id)}
+              onChange={() => toggleSelected(item.id)}
+              aria-label={`${item.title} auswählen`}
+              className="h-5 w-5 p-1.5 shrink-0"
+            />
             <Link to={`/items/${item.id}`} className="font-medium hover:underline flex-1 min-w-[150px]">
               {item.title}
             </Link>
@@ -42,7 +81,7 @@ export default function Inbox() {
               onChange={(e) =>
                 updateItem.mutate({ id: item.id, data: { type: e.target.value as Item["type"] } })
               }
-              className="border rounded px-2 py-1 text-sm"
+              className="border rounded px-2 py-1.5 min-h-[36px] text-sm"
             >
               <option value="IDEA">Idee</option>
               <option value="TASK">Aufgabe</option>
@@ -70,7 +109,7 @@ export default function Inbox() {
               onChange={(e) =>
                 updateItem.mutate({ id: item.id, data: { assignedToId: e.target.value || null } })
               }
-              className="border rounded px-2 py-1 text-sm"
+              className="border rounded px-2 py-1.5 min-h-[36px] text-sm"
             >
               <option value="">Nicht zugewiesen</option>
               {users?.map((u) => (

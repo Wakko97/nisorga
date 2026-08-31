@@ -29,6 +29,7 @@ enum ItemSource {
   MANUAL
   EMAIL
   VOICE
+  SCAN
 }
 
 // Singleton row (id is always 1) tracking whether the setup wizard has run.
@@ -90,6 +91,11 @@ model Item {
   assignedToId  String?
   assignedTo    User?      @relation("AssignedItems", fields: [assignedToId], references: [id])
   googleEventId String?
+  // Relative path (within UPLOADS_DIR) to a scanned/attached photo for this
+  // item, e.g. "3fa2c1e4-....jpg". Never a full URL or client-controlled
+  // filename — see lib/uploads.ts. Served only via the authenticated
+  // GET /items/:id/attachment route, never a static mount.
+  attachmentPath String?
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
 

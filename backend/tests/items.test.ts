@@ -1,6 +1,7 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
 import request from "supertest";
 import { app } from "../src/app";
+import * as webhooksLib from "../src/lib/webhooks";
 
 async function registerAndLogin(email: string, name: string) {
   const res = await request(app).post("/auth/register").send({ email, password: "password123", name });
@@ -109,5 +110,138 @@ describe("items", () => {
     await request(app).post("/items").set("Cookie", ownerCookie).send({ title: "Idee", type: "IDEA" });
     const res = await request(app).get("/items?type=IDEA&status=INBOX").set("Cookie", ownerCookie);
     expect(res.status).toBe(200);
+  });
+});
+
+describe("bulk item operations", () => {
+  let ownerCookie: string[];
+  let memberCookie: string[];
+
+  beforeEach(async () => {
+    ownerCookie = await registerAndLogin("owner@test.com", "Owner");
+    memberCookie = await registerAndLogin("member@test.com", "Member");
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("updates multiple own items correctly with PATCH /items/bulk", async () => {
+    const a = await request(app).post("/items").set("Cookie", ownerCookie).send({ title: "A" });
+    const b = await request(app).post("/items").set("Cookie", ownerCookie).send({ title: "B" });
+
+    const res = await request(app)
+      .patch("/items/bulk")
+      .set("Cookie", ownerCookie)
+      .send({ ids: [a.body.id, b.body.id], patch: { important: true } });
+
+    expect(res.status).toBe(200);
+    expect(res.body.updated).toHaveLength(2);
+    expect(res.body.skipped).toHaveLength(0);
+    expect(res.body.updated.every((i: any) => i.important === true)).toBe(true);
+  });
+
+  it("skips items the requesting user has no access to, without modifying them", async () => {
+    const ownerItem = await request(app).post("/items").set("Cookie", ownerCookie).send({ title: "Owner-only" });
+
+    const res = await request(app)
+      .patch("/items/bulk")
+      .set("Cookie", memberCookie)
+      .send({ ids: [ownerItem.body.id], patch: { important: true } });
+
+    expect(res.status).toBe(200);
+    expect(res.body.updated).toHaveLength(0);
+    expect(res.body.skipped).toEqual([{ id: ownerItem.body.id, reason: "forbidden" }]);
+
+    const stillUnchanged = await request(app).get("/items").set("Cookie", ownerCookie);
+    expect(stillUnchanged.body[0].important).toBe(false);
+  });
+
+  it("reports not_found for ids that do not exist", async () => {
+    const res = await request(app)
+      .patch("/items/bulk")
+      .set("Cookie", ownerCookie)
+      .send({ ids: ["00000000-0000-0000-0000-000000000000"], patch: { important: true } });
+
+    expect(res.status).toBe(200);
+    expect(res.body.skipped).toEqual([{ id: "00000000-0000-0000-0000-000000000000", reason: "not_found" }]);
+  });
+
+  it("sets waitingSince correctly when status: WAITING is applied via bulk patch", async () => {
+    const item = await request(app).post("/items").set("Cookie", ownerCookie).send({ title: "Delegiert" });
+
+    const res = await request(app)
+      .patch("/items/bulk")
+      .set("Cookie", ownerCookie)
+      .send({ ids: [item.body.id], patch: { status: "WAITING" } });
+
+    expect(res.status).toBe(200);
+    expect(res.body.updated[0].status).toBe("WAITING");
+    expect(res.body.updated[0].waitingSince).not.toBeNull();
+  });
+
+  it("deletes authorized items and leaves items belonging to other users untouched via DELETE /items/bulk", async () => {
+    const ownItem = await request(app).post("/items").set("Cookie", memberCookie).send({ title: "Mein Item" });
+    const ownerItem = await request(app).post("/items").set("Cookie", ownerCookie).send({ title: "Owner-only" });
+
+    const res = await request(app)
+      .delete("/items/bulk")
+      .set("Cookie", memberCookie)
+      .send({ ids: [ownItem.body.id, ownerItem.body.id] });
+
+    expect(res.status).toBe(200);
+    expect(res.body.deletedIds).toEqual([ownItem.body.id]);
+    expect(res.body.skipped).toEqual([{ id: ownerItem.body.id, reason: "forbidden" }]);
+
+    const ownerItems = await request(app).get("/items").set("Cookie", ownerCookie);
+    expect(ownerItems.body.map((i: any) => i.id)).toContain(ownerItem.body.id);
+  });
+
+  it("rejects an empty ids array with 400", async () => {
+    const res = await request(app)
+      .patch("/items/bulk")
+      .set("Cookie", ownerCookie)
+      .send({ ids: [], patch: { important: true } });
+    expect(res.status).toBe(400);
+  });
+
+  it("rejects more than the maximum allowed ids with 400", async () => {
+    const ids = Array.from({ length: 201 }, (_, i) => `id-${i}`);
+    const res = await request(app)
+      .patch("/items/bulk")
+      .set("Cookie", ownerCookie)
+      .send({ ids, patch: { important: true } });
+    expect(res.status).toBe(400);
+  });
+
+  it("rejects an empty ids array with 400 for DELETE /items/bulk", async () => {
+    const res = await request(app).delete("/items/bulk").set("Cookie", ownerCookie).send({ ids: [] });
+    expect(res.status).toBe(400);
+  });
+
+  it("fires item.updated webhooks for each item actually updated in bulk", async () => {
+    const fireWebhooksSpy = vi.spyOn(webhooksLib, "fireWebhooks").mockResolvedValue(undefined);
+
+    const a = await request(app).post("/items").set("Cookie", ownerCookie).send({ title: "A" });
+    const b = await request(app).post("/items").set("Cookie", ownerCookie).send({ title: "B" });
+    fireWebhooksSpy.mockClear();
+
+    const res = await request(app)
+      .patch("/items/bulk")
+      .set("Cookie", ownerCookie)
+      .send({ ids: [a.body.id, b.body.id], patch: { important: true } });
+
+    expect(res.status).toBe(200);
+    expect(fireWebhooksSpy).toHaveBeenCalledTimes(2);
+    expect(fireWebhooksSpy).toHaveBeenCalledWith(
+      expect.any(String),
+      "item.updated",
+      expect.objectContaining({ id: a.body.id })
+    );
+    expect(fireWebhooksSpy).toHaveBeenCalledWith(
+      expect.any(String),
+      "item.updated",
+      expect.objectContaining({ id: b.body.id })
+    );
   });
 });

@@ -20,20 +20,20 @@ function ItemActions({ item, users }: { item: Item; users: User[] | undefined })
     <div className="flex flex-wrap items-center gap-2 text-xs">
       <button
         onClick={() => updateItem.mutate({ important: true, urgent: true })}
-        className="px-2 py-1 rounded border hover:bg-gray-100"
+        className="px-3 py-2 min-h-[44px] rounded border hover:bg-gray-100"
       >
         Wichtig &amp; dringend
       </button>
       <button
         onClick={() => updateItem.mutate({ important: true, urgent: false })}
-        className="px-2 py-1 rounded border hover:bg-gray-100"
+        className="px-3 py-2 min-h-[44px] rounded border hover:bg-gray-100"
       >
         Nur wichtig
       </button>
       {item.type === "IDEA" && (
         <button
           onClick={() => convertItem.mutate()}
-          className="px-2 py-1 rounded border hover:bg-gray-100"
+          className="px-3 py-2 min-h-[44px] rounded border hover:bg-gray-100"
         >
           Zu Aufgabe konvertieren
         </button>

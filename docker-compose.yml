@@ -34,6 +34,11 @@ services:
     # Für docker-compose MUSS der Host in backend/.env auf den Servicenamen
     # "postgres" geändert werden, z.B.:
     #   DATABASE_URL="postgresql://<user>:<pass>@postgres:5432/<db>?schema=public"
+    volumes:
+      # Persistiert hochgeladene Item-Anhänge (z.B. Kamera-Scan-Fotos) über
+      # Container-Neustarts hinweg. Muss zu UPLOADS_DIR in backend/.env passen
+      # (Default dort: "./uploads", relativ zu /app im Container).
+      - uploads_data:/app/uploads
     networks:
       - internal
     # Kein Host-Port-Publish standardmäßig: das Backend ist nur intern im
@@ -84,3 +89,4 @@ networks:
 
 volumes:
   postgres_data:
+  uploads_data:

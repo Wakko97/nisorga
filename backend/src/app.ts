@@ -11,6 +11,7 @@ import helmet from "helmet";
 
 import authRouter from "./routes/auth";
 import itemsRouter from "./routes/items";
+import attachmentsRouter from "./routes/attachments";
 import usersRouter from "./routes/users";
 import googleIntegrationRouter from "./routes/googleIntegration";
 import settingsRouter from "./routes/settings";
@@ -40,6 +41,7 @@ app.get("/health", (_req, res) => res.json({ ok: true, timestamp: new Date().toI
 
 app.use("/auth", authRouter);
 app.use("/items", itemsRouter);
+app.use("/items", attachmentsRouter);
 app.use("/users", usersRouter);
 app.use("/integrations/google", googleIntegrationRouter);
 app.use("/settings", settingsRouter);

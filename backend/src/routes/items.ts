@@ -57,6 +57,85 @@ router.post("/", async (req, res) => {
   res.status(201).json(item);
 });
 
+const MAX_BULK_IDS = 200;
+
+router.patch("/bulk", async (req, res) => {
+  const user = req.user!;
+  const { ids, patch } = req.body ?? {};
+
+  if (!Array.isArray(ids) || ids.length === 0 || ids.length > MAX_BULK_IDS) {
+    return res.status(400).json({ error: `ids must be a non-empty array of at most ${MAX_BULK_IDS} items` });
+  }
+  if (!patch || typeof patch !== "object") {
+    return res.status(400).json({ error: "patch is required" });
+  }
+
+  const { status, assignedToId, important, urgent } = patch;
+  if (status !== undefined && !VALID_STATUSES.includes(String(status))) {
+    return res.status(400).json({ error: "Invalid status" });
+  }
+
+  const skipped: { id: string; reason: "not_found" | "forbidden" }[] = [];
+  const authorizedIds: string[] = [];
+
+  for (const id of ids) {
+    const existing = await findItemForUser(String(id), user);
+    if (existing === null) skipped.push({ id, reason: "not_found" });
+    else if (existing === "forbidden") skipped.push({ id, reason: "forbidden" });
+    else authorizedIds.push(id);
+  }
+
+  let waitingSinceUpdate: { waitingSince: Date | null } | {} = {};
+  if (status !== undefined) {
+    waitingSinceUpdate = status === "WAITING" ? { waitingSince: new Date() } : { waitingSince: null };
+  }
+
+  const data = {
+    ...(status !== undefined ? { status } : {}),
+    ...(assignedToId !== undefined ? { assignedToId } : {}),
+    ...(important !== undefined ? { important } : {}),
+    ...(urgent !== undefined ? { urgent } : {}),
+    ...waitingSinceUpdate,
+  };
+
+  const updated = authorizedIds.length
+    ? await prisma.$transaction(
+        authorizedIds.map((id) => prisma.item.update({ where: { id }, data }))
+      )
+    : [];
+
+  for (const item of updated) {
+    fireWebhooks(user.id, "item.updated", item);
+  }
+
+  res.json({ updated, skipped });
+});
+
+router.delete("/bulk", async (req, res) => {
+  const user = req.user!;
+  const { ids } = req.body ?? {};
+
+  if (!Array.isArray(ids) || ids.length === 0 || ids.length > MAX_BULK_IDS) {
+    return res.status(400).json({ error: `ids must be a non-empty array of at most ${MAX_BULK_IDS} items` });
+  }
+
+  const skipped: { id: string; reason: "not_found" | "forbidden" }[] = [];
+  const authorizedIds: string[] = [];
+
+  for (const id of ids) {
+    const existing = await findItemForUser(String(id), user);
+    if (existing === null) skipped.push({ id, reason: "not_found" });
+    else if (existing === "forbidden") skipped.push({ id, reason: "forbidden" });
+    else authorizedIds.push(id);
+  }
+
+  if (authorizedIds.length) {
+    await prisma.$transaction(authorizedIds.map((id) => prisma.item.delete({ where: { id } })));
+  }
+
+  res.json({ deletedIds: authorizedIds, skipped });
+});
+
 router.patch("/:id", async (req, res) => {
   const user = req.user!;
   const existing = await findItemForUser(req.params.id, user);

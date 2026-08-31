@@ -5,3 +5,11 @@
 body {
   @apply bg-gray-50 text-gray-900;
 }
+
+/* Respect device notches/home-indicator when the app runs as an installed PWA. */
+:root {
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+}

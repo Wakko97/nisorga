@@ -139,7 +139,7 @@ export default function Settings() {
             value={newKeyLabel}
             onChange={(e) => setNewKeyLabel(e.target.value)}
             placeholder="Bezeichnung (z.B. Zapier)"
-            className="flex-1 border rounded px-3 py-1.5 text-sm"
+            className="flex-1 border rounded px-3 py-2 min-h-[44px] text-sm"
           />
           <button
             onClick={() => newKeyLabel.trim() && createApiKey.mutate(newKeyLabel.trim())}
@@ -174,7 +174,7 @@ export default function Settings() {
             value={webhookUrl}
             onChange={(e) => setWebhookUrl(e.target.value)}
             placeholder="https://example.com/webhook"
-            className="flex-1 border rounded px-3 py-1.5 text-sm"
+            className="flex-1 border rounded px-3 py-2 min-h-[44px] text-sm"
           />
           <button
             onClick={() => webhookUrl && webhookEvents.length > 0 && createWebhook.mutate()}

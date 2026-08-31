@@ -3,6 +3,8 @@ dist/
 build/
 .env
 .env.local
+.env.test
+backend/uploads/
 *.log
 .DS_Store
 *.tsbuildinfo
