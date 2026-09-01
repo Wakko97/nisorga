@@ -13,6 +13,7 @@ export default function QuickCapture() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [queuedCount, setQueuedCount] = useState(() => getQueue().length);
   const [syncing, setSyncing] = useState(false);
+  const [queueError, setQueueError] = useState<string | null>(null);
 
   async function sync() {
     if (getQueue().length === 0) return;
@@ -59,8 +60,14 @@ export default function QuickCapture() {
       // it's synced automatically once the connection (or the app) comes
       // back, see lib/offlineQueue.ts.
       if (isNetworkError(err)) {
-        enqueueItem(title);
-        setTitle("");
+        if (enqueueItem(title)) {
+          setQueueError(null);
+          setTitle("");
+        } else {
+          // Couldn't persist (storage full/unavailable) — keep the typed
+          // title in the input rather than claiming it's safely queued.
+          setQueueError("Konnte nicht offline gespeichert werden (Speicher voll?). Bitte Titel notieren.");
+        }
       }
     },
   });
@@ -112,6 +119,7 @@ export default function QuickCapture() {
         </button>
         <ScanCapture />
       </div>
+      {queueError && <p className="mt-2 text-xs text-red-600">{queueError}</p>}
       {queuedCount > 0 && (
         <div className="mt-2 flex items-center gap-2 text-xs text-amber-700">
           <span className="badge-warn">
