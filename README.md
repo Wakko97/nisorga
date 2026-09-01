@@ -76,7 +76,7 @@ Bei einer frischen Installation (noch kein Owner-Account angelegt) leitet die Ap
 
 1. **Willkommen** — kurzer Überblick über die App.
 2. **Owner-Account anlegen** — Name, E-Mail, Passwort (min. 8 Zeichen). Ruft `POST /setup/init` auf, das atomar genau einmal einen Owner-Account erzeugen kann (verhindert eine Race Condition bei gleichzeitigen Erstaufrufen). Ist die App bereits eingerichtet, meldet der Wizard das und verlinkt zu `/login`.
-3. **Server-Konfiguration** — reine Statusanzeige (`GET /setup/status`), ob Google Calendar, SendGrid und der E-Mail-Empfang serverseitig konfiguriert sind. Secrets werden bewusst NICHT über den Browser gesetzt — das bleibt Sache der `.env`-Datei (siehe oben und [Produktivhärtung](#produktivhärtung)).
+3. **Server-Konfiguration** — reine Statusanzeige (`GET /setup/status`), ob Google Calendar, SMTP-Versand und der E-Mail-Empfang serverseitig konfiguriert sind. Secrets werden bewusst NICHT über den Browser gesetzt — das bleibt Sache der `.env`-Datei (siehe oben und [Produktivhärtung](#produktivhärtung)).
 
 Nach Abschluss landest du eingeloggt als Owner in der Inbox. Alle späteren Selbstregistrierungen über `/register` werden automatisch `MEMBER`.
 
@@ -84,8 +84,8 @@ Nach Abschluss landest du eingeloggt als Owner in der Inbox. Alle späteren Selb
 
 1. In der Google Cloud Console ein Projekt anlegen, die "Google Calendar API" aktivieren.
 2. OAuth2-Client-ID (Typ "Webanwendung") anlegen, als Redirect-URI `http://localhost:4000/integrations/google/callback` eintragen.
-3. Client-ID/-Secret in `backend/.env` eintragen.
-4. In der App unter **Einstellungen** auf "Google Kalender verbinden" klicken.
+3. Client-ID/-Secret entweder direkt in der App unter **Einstellungen → App-Konfiguration** eintragen (nur für Owner sichtbar, Secret AES-256-GCM-verschlüsselt in der DB abgelegt) — oder in `backend/.env` (`GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`/`GOOGLE_REDIRECT_URI`), was als Fallback dient, falls in den Einstellungen nichts gesetzt ist.
+4. In der App unter **Einstellungen** auf "Google Kalender verbinden" klicken (das ist die separate, pro Nutzer:in laufende OAuth-Verbindung — nicht zu verwechseln mit den globalen Client-Zugangsdaten aus Schritt 3).
 
 ## Externe Integrations-API
 
@@ -97,27 +97,52 @@ Siehe [docs/deployment.md](docs/deployment.md) für eine vollständige Anleitung
 
 ## Erweiterte Features
 
+- **Suche** (`/search`, Backend `GET /items?q=...`): Titel und Beschreibung, case-insensitive Substring-Suche über alle für die eingeloggte Person sichtbaren Items, kombinierbar mit den bestehenden `type`/`status`-Filtern. Erreichbar über das 🔍-Icon im Header. (Kein Postgres-Volltextindex/`tsvector` — für die hier zu erwartenden Item-Mengen reicht `ILIKE`.)
+- **Daten-Export** (**Einstellungen → Daten-Export**, Backend `GET /items/export?format=csv|json`): lädt alle sichtbaren Items als CSV oder JSON herunter, respektiert dieselben Sichtbarkeits- und `type`/`status`/`q`-Filter wie `GET /items`.
 - **Wochenrückblick** (`/review`, Backend `GET /review/weekly`): zeigt offene Inbox-Punkte, überfällige Aufgaben und seit über 3 Tagen unbearbeitete Ideen, mit Inline-Aktionen (Priorität setzen, zu Aufgabe konvertieren, zuweisen, archivieren). Dieselbe Sichtbarkeitslogik wie bei `/items` (Owner sehen alles, Mitglieder nur eigene/zugewiesene Items).
-- **E-Mail-Erfassung**: Jeder Nutzer bekommt eine persönliche Inbound-Adresse (`inbox+<token>@<EMAIL_INBOUND_DOMAIN>`, sichtbar/kopierbar unter Einstellungen). Eingehende Mails werden über SendGrid Inbound Parse als Idee in der Inbox angelegt (`source=EMAIL`).
-- **Delegations-Tracking & Erinnerungen**: Items können auf Status „Wartet auf Rückmeldung" (`WAITING`) gesetzt werden; `waitingSince` wird automatisch gepflegt. Ein täglicher Cron-Job verschickt nach `WAITING_REMINDER_DAYS` (Default 3) eine Erinnerungsmail an Ersteller:in und Zugewiesene:n. Aufgaben-/Matrix-Ansicht zeigen ein rotes "überfällig, wartet seit X Tagen"-Badge.
+- **E-Mail-Erfassung**: Jeder Nutzer bekommt eine persönliche Inbound-Adresse (`inbox+<token>@<EMAIL_INBOUND_DOMAIN>`, sichtbar/kopierbar unter Einstellungen). Eingehende Mails werden per IMAP-Polling (Standard: alle 2 Minuten, `IMAP_POLL_CRON`) abgeholt und als Idee in der Inbox angelegt (`source=EMAIL`).
+- **Delegations-Tracking & Erinnerungen**: Items können auf Status „Wartet auf Rückmeldung" (`WAITING`) gesetzt werden; `waitingSince` wird automatisch gepflegt. Ein täglicher Cron-Job verschickt nach dem konfigurierten Schwellwert (Default 3 Tage — einstellbar unter **Einstellungen → App-Konfiguration** oder via `WAITING_REMINDER_DAYS`) eine Erinnerungsmail **und**, falls aktiviert (siehe unten), eine Push-Benachrichtigung an Ersteller:in und Zugewiesene:n. Aufgaben-/Matrix-Ansicht zeigen ein rotes "überfällig, wartet seit X Tagen"-Badge.
+- **Push-Benachrichtigungen** (Web Push, **Einstellungen → Push-Benachrichtigungen**): Delegations-Erinnerungen zusätzlich als Browser-Benachrichtigung, pro Gerät/Browser einzeln aktivierbar. Setzt einen eigenen Service Worker voraus (`frontend/src/sw.ts`, via `vite-plugin-pwa`s `injectManifest`-Strategie gebaut) und serverseitige VAPID-Schlüssel — siehe [Push-Benachrichtigungen einrichten](#push-benachrichtigungen-einrichten).
+- **Zwei-Faktor-Authentifizierung** (TOTP, **Einstellungen → Zwei-Faktor-Authentifizierung**): pro Nutzer:in optional aktivierbar (`POST /auth/2fa/setup` → QR-Code + Secret, `POST /auth/2fa/enable` → bestätigt per Code, liefert 10 einmalig gültige Backup-Codes). Ist 2FA aktiv, liefert `POST /auth/login` statt einer Session nur `{ twoFactorRequired: true, tempToken }` (5 Minuten gültig); `POST /auth/2fa/verify-login` mit `tempToken` + TOTP-Code oder Backup-Code schließt den Login ab. Das TOTP-Secret liegt AES-256-GCM-verschlüsselt in der DB, Backup-Codes nur bcrypt-gehasht. Deaktivieren (`POST /auth/2fa/disable`) verlangt erneut das Passwort.
 - **Wochenrückblick-Digest**: Ein wöchentlicher Cron-Job (freitags 08:00) verschickt die Wochenrückblick-Daten aller Nutzer:innen als HTML-Mail.
 - **Sprachnotiz**: Mikrofon-Button im Schnellerfassungsfeld nutzt die Web-Speech-API (`de-DE`), um gesprochenen Text direkt als Titel zu übernehmen. Wird ausgeblendet/deaktiviert, wenn der Browser die API nicht unterstützt.
 - **Kamera-Scan**: Kamera-Button (📷) im Schnellerfassungsfeld öffnet auf Mobilgeräten direkt die Rückkamera (`<input type="file" capture="environment">`). Das Foto wird clientseitig per Tesseract.js (deutsches Sprachpaket, dynamisch nachgeladen — kein Teil des Haupt-Bundles) per OCR ausgewertet; der erkannte Text (erste ~80 Zeichen) erscheint als bearbeitbarer Titel-Vorschlag. Beim Speichern wird zuerst das Item angelegt (`source=SCAN`) und danach das Foto per `POST /items/:id/attachment` als Anhang hochgeladen. Anhänge liegen serverseitig unter `UPLOADS_DIR` (Default `./uploads`) unter einem zufälligen Dateinamen und werden ausschließlich über die authentifizierte Route `GET /items/:id/attachment` ausgeliefert (kein öffentlicher Static-Mount), damit die Item-Sichtbarkeitsregeln greifen. In `docker-compose.yml` liegt `UPLOADS_DIR` auf dem benannten Volume `uploads_data`, damit Anhänge Container-Neustarts überleben.
 
-### SendGrid einrichten
+### E-Mail (SMTP/IMAP) einrichten
 
-1. Im SendGrid-Konto eine **Inbound Parse**-Domain/-Subdomain einrichten (z. B. `inbound.deine-domain.tld`) und den MX-Eintrag entsprechend SendGrid-Anleitung setzen.
-2. Als Webhook-URL `https://<backend-host>/integrations/email/inbound?secret=<EMAIL_INBOUND_SECRET>` eintragen (POST, multipart/form-data — "Post the raw, full MIME message" kann deaktiviert bleiben, da nur `to`/`subject`/`text` ausgewertet werden).
-3. In `backend/.env` `SENDGRID_API_KEY`, `SENDGRID_FROM_EMAIL`, `EMAIL_INBOUND_SECRET` und `EMAIL_INBOUND_DOMAIN` (= die eingerichtete Inbound-Parse-Domain) setzen.
-4. Ohne gesetzten `SENDGRID_API_KEY` versendet `sendEmail()` keine echten Mails, sondern loggt nur eine Warnung — lokale Entwicklung funktioniert also auch ohne SendGrid-Account.
+Nisorga verschickt Mails per SMTP und holt eingehende Mails per IMAP ab — beides läuft gegen ein normales Mail-Konto (eigener Mailserver oder ein beliebiger Provider mit SMTP/IMAP-Zugang), es wird kein externer E-Mail-Dienst (SendGrid o. ä.) benötigt.
 
-> **Hinweis:** Die Cron-Jobs (Erinnerungen, Wochendigest) laufen im selben Node-Prozess wie der API-Server (`node-cron`, registriert in `backend/src/index.ts`, deaktiviert wenn `NODE_ENV=test`). Für den Produktivbetrieb bei höherer Last ist ein separater Worker-Prozess empfehlenswert, damit lang laufende Jobs den API-Server nicht beeinträchtigen.
+**Zwei Wege, das zu konfigurieren** (siehe `backend/src/lib/mailConfig.ts`):
+
+- **Settings-UI** (empfohlen für den laufenden Betrieb): Sobald ein Owner-Account existiert, unter **Einstellungen → Mail-Konfiguration** einstellbar — wirkt sofort, kein Neustart nötig. Passwörter werden AES-256-GCM-verschlüsselt in der Datenbank abgelegt (siehe [Produktivhärtung](#produktivhärtung)) und nie an den Browser zurückgegeben.
+- **Umgebungsvariablen** (`backend/.env`): Dienen als Bootstrap-Default, bevor ein Owner-Account existiert, bzw. für rein env-basierte Deployments. Eine in der Settings-UI gesetzte Variable überschreibt die gleichnamige `.env`-Variable feldweise; alles nicht in der UI Gesetzte fällt weiterhin auf `.env` zurück.
+
+**Ausgehend (SMTP)** — für E-Mail-Verifizierung, Erinnerungen, Wochendigest:
+
+1. Host, Port, TLS, Benutzername, Passwort, Absenderadresse setzen — per UI oder in `backend/.env`: `SMTP_HOST`, `SMTP_PORT` (587 für STARTTLS, 465 für implizites TLS), `SMTP_SECURE` (`"true"` nur bei Port 465), `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM_EMAIL`.
+2. Ist nirgends ein Host gesetzt, versendet `sendEmail()` keine echten Mails, sondern loggt nur eine Warnung — lokale Entwicklung funktioniert also auch ohne Mail-Konto.
+
+**Eingehend (IMAP)** — für die E-Mail-Erfassung (Mails werden zu Items):
+
+1. Eine Mailbox einrichten, die **alle** an die Inbound-Domain adressierten Mails empfängt — entweder ein Catch-All-Postfach für diese (Sub-)Domain, oder ein Provider mit Plus-Adressierung (`inbox+<token>@...` landet dann im selben Postfach wie `inbox@...`). Ein selbst gehosteter Postfix/Dovecot unterstützt beides.
+2. Host, Port, TLS, Benutzername, Passwort, Mailbox und Inbound-Domain setzen — per UI oder in `backend/.env`: `IMAP_HOST`, `IMAP_PORT` (Standard 993), `IMAP_SECURE`, `IMAP_USER`, `IMAP_PASSWORD`, `IMAP_MAILBOX` (Standard `INBOX`) und `EMAIL_INBOUND_DOMAIN` (wird für die angezeigte Inbound-Adresse in den Einstellungen gebraucht).
+3. Das Backend pollt die Mailbox per Cron-Job (Standard: alle 2 Minuten, überschreibbar via `IMAP_POLL_CRON` in `.env`), verarbeitet ungelesene Nachrichten und markiert sie danach als gelesen — egal ob die Zustellung geklappt hat, damit eine unroutbare Mail (unbekanntes Token) nicht endlos erneut verarbeitet wird.
+4. Ist nirgends ein Host gesetzt, läuft der Poll-Job als No-Op (nur eine Warnung im Log) — lokale Entwicklung funktioniert also auch ohne Mail-Konto.
+
+> **Hinweis:** Die Cron-Jobs (Erinnerungen, Wochendigest, IMAP-Poll) laufen im selben Node-Prozess wie der API-Server (`node-cron`, registriert in `backend/src/index.ts`, deaktiviert wenn `NODE_ENV=test`). Für den Produktivbetrieb bei höherer Last ist ein separater Worker-Prozess empfehlenswert, damit lang laufende Jobs den API-Server nicht beeinträchtigen.
+
+### Push-Benachrichtigungen einrichten
+
+1. Einmalig ein VAPID-Schlüsselpaar erzeugen: `npx web-push generate-vapid-keys` (im `backend`-Verzeichnis, `web-push` ist bereits als Dependency vorhanden).
+2. In `backend/.env` setzen: `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` und `VAPID_SUBJECT` (eine `mailto:`- oder `https:`-Adresse, die Push-Dienste bei Problemen mit dem Schlüssel kontaktieren können). Anders als SMTP/IMAP/Google aktuell **nicht** über die Settings-UI konfigurierbar — nur ein einmalig zu erzeugendes Schlüsselpaar für die ganze Instanz, kein laufend zu pflegendes Zugangsdatum.
+3. Frontend neu bauen/deployen (`docker compose up -d --build`) — der Service Worker (`frontend/src/sw.ts`) muss mitausgeliefert werden.
+4. Jede Person aktiviert Push-Benachrichtigungen selbst, pro Gerät/Browser, unter **Einstellungen → Push-Benachrichtigungen**. Ohne gesetzte `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY` bleibt der Versand ein No-Op (nur eine Warnung im Log) — lokale Entwicklung funktioniert also auch ohne VAPID-Schlüssel.
 
 ## Produktivhärtung
 
-- **Verschlüsselte Google-Tokens**: `accessToken`/`refreshToken` in `GoogleAccount` werden AES-256-GCM-verschlüsselt gespeichert (`backend/src/lib/crypto.ts`). Erforderlich: `GOOGLE_TOKEN_ENCRYPTION_KEY` in `.env` (32 Byte, hex-kodiert — generieren mit `openssl rand -hex 32`). Ohne diesen Key schlägt jede Google-Verbindung/-Nutzung fehl statt Klartext-Tokens zu speichern.
+- **Verschlüsselte Secrets**: `GoogleAccount.accessToken`/`refreshToken`, SMTP-/IMAP-Passwörter, das Google-OAuth-Client-Secret (jeweils aus den Settings) sowie das TOTP-2FA-Secret werden AES-256-GCM-verschlüsselt gespeichert (`backend/src/lib/crypto.ts`). Erforderlich: `GOOGLE_TOKEN_ENCRYPTION_KEY` in `.env` (32 Byte, hex-kodiert — generieren mit `openssl rand -hex 32`). Ohne diesen Key schlägt jede Verschlüsselung fehl statt Klartext-Secrets zu speichern.
 - **Rate-Limiting für `/api/v1`**: 300 Requests / 15 Minuten pro API-Key (Fallback: IP), via `express-rate-limit` (`backend/src/routes/apiV1.ts`). Antworten enthalten die Standard-`RateLimit-*`-Header.
-- **Brute-Force-Schutz für `/auth/login`**: 10 Versuche / 15 Minuten pro IP+E-Mail-Kombination (`backend/src/routes/auth.ts`).
+- **Brute-Force-Schutz für `/auth/login`** (10 Versuche / 15 Minuten pro IP+E-Mail-Kombination) **und `/auth/2fa/verify-login`** (10 Versuche / 15 Minuten pro `tempToken` — ein TOTP-Code hat nur 10⁶ Möglichkeiten) via `express-rate-limit` (`backend/src/routes/auth.ts`).
 - **Refresh-Token-Rotation**: Login/Registrierung setzen zwei Cookies — ein kurzlebiges Access-Token (`token`, 15 Min., JWT) und ein Refresh-Token (`refreshToken`, 30 Tage, zufälliger Wert, nur gehasht in der DB gespeichert, Cookie-Pfad `/auth`). `POST /auth/refresh` rotiert das Refresh-Token bei jeder Nutzung (Single-Use); wird ein bereits verwendetes/rotiertes Token erneut vorgelegt, gilt das als Diebstahlsignal und alle Refresh-Tokens der/des Nutzer:in werden widerrufen. Der Frontend-API-Client (`frontend/src/lib/api.ts`) ruft `/auth/refresh` transparent bei einem 401 auf und wiederholt den ursprünglichen Request einmal.
 - **E-Mail-Verifizierung**: Bei der Registrierung wird automatisch eine Bestätigungsmail mit Link zu `/verify-email?token=...` verschickt (`POST /auth/verify-email`). Unbestätigte Accounts können sich weiterhin einloggen und die App nutzen (kein Hard-Block, um die Ersteinrichtung nicht zu blockieren), sehen aber im UI einen Hinweisbanner mit "Erneut senden"-Option (`POST /auth/resend-verification`).
 
@@ -161,7 +186,7 @@ cd frontend
 npx playwright install --with-deps chromium
 ```
 
-Voraussetzung: `backend/.env` muss vollständig ausgefüllt sein (siehe `backend/.env.example`), insbesondere `JWT_SECRET`, `EMAIL_INBOUND_SECRET` und `GOOGLE_TOKEN_ENCRYPTION_KEY` — ohne diese startet das Backend nicht. Für die E2E-Tests genügt die normale (nicht die Test-)Datenbank aus dem Setup-Abschnitt oben, solange die Migrationen angewendet wurden (`npx prisma migrate deploy`).
+Voraussetzung: `backend/.env` muss vollständig ausgefüllt sein (siehe `backend/.env.example`), insbesondere `JWT_SECRET` und `GOOGLE_TOKEN_ENCRYPTION_KEY` — ohne diese startet das Backend nicht. Für die E2E-Tests genügt die normale (nicht die Test-)Datenbank aus dem Setup-Abschnitt oben, solange die Migrationen angewendet wurden (`npx prisma migrate deploy`).
 
 `frontend/playwright.config.ts` startet Backend (`npm run dev` in `../backend`, Port 4000) und Frontend (`npm run dev`, Port 5173) automatisch über die `webServer`-Option (Array mit zwei Einträgen), sofern sie nicht schon laufen (`reuseExistingServer: !process.env.CI`). Ein manueller Start in zwei Terminals ist daher nicht nötig, funktioniert aber genauso — Playwright erkennt bereits laufende Server auf den konfigurierten Ports und startet sie dann nicht erneut.
 
@@ -202,4 +227,83 @@ sudo ./scripts/nisorga-lxc-install.sh --yes --ip 192.168.1.50/24 --gateway 192.1
 
 Wichtige Optionen: `--ctid`, `--hostname`, `--storage`, `--bridge`, `--ip` (`dhcp` oder CIDR + `--gateway`), `--cores`, `--memory`, `--swap`, `--disk`, `--password`, `--branch`, `--privileged`, `--dry-run`. Am Ende gibt das Skript die Container-ID sowie das (ggf. generierte) Root-Passwort aus; Einstieg mit `pct enter <CTID>`.
 
-**Wichtig:** Google-Kalender- und SendGrid-Integration werden dabei bewusst NICHT automatisch konfiguriert (siehe [Google-Kalender-Integration einrichten](#google-kalender-integration-einrichten) und [SendGrid einrichten](#sendgrid-einrichten)) — dafür in `backend/.env` im Container (`/opt/nisorga/backend/.env`) nachtragen und `docker compose restart backend` ausführen. Ebenso ist standardmäßig kein Port für das Frontend nach außen freigegeben (siehe [docs/deployment.md](docs/deployment.md), Abschnitt zu `docker-compose.yml`) — für direkten Zugriff ohne eigenen Reverse Proxy den auskommentierten `ports`-Block beim `frontend`-Service in `docker-compose.yml` aktivieren.
+**Wichtig:** Google-Kalender- und SMTP/IMAP-Integration werden dabei bewusst NICHT automatisch konfiguriert (siehe [Google-Kalender-Integration einrichten](#google-kalender-integration-einrichten) und [E-Mail (SMTP/IMAP) einrichten](#e-mail-smtpimap-einrichten)). SMTP/IMAP lässt sich nach dem Einrichtungswizard direkt in der App unter Einstellungen konfigurieren; alternativ (oder für Google Kalender) in `backend/.env` im Container (`/opt/nisorga/backend/.env`) nachtragen und `docker compose restart backend` ausführen. Ebenso ist standardmäßig kein Port für das Frontend nach außen freigegeben (siehe [docs/deployment.md](docs/deployment.md), Abschnitt zu `docker-compose.yml`) — für direkten Zugriff ohne eigenen Reverse Proxy den auskommentierten `ports`-Block beim `frontend`-Service in `docker-compose.yml` aktivieren.
+
+### 3. Nisorga in einem bestehenden Container aktualisieren
+
+`scripts/nisorga-lxc-update.sh` aktualisiert einen mit `nisorga-lxc-install.sh` erstellten Container auf den neuesten Stand (über `scripts/nisorga-update.sh`, das dafür in den Container übertragen und dort ausgeführt wird) und startet ihn per `docker compose up -d --build` neu. `.env`/`backend/.env` sowie hochgeladene Anhänge (`backend/uploads/`) bleiben dabei unangetastet.
+
+Zwei Quellen für den neuen Code:
+
+- **Git (Standard)**: holt den neuesten Commit des angegebenen Branches (`git fetch` + `git reset --hard`).
+- **GitHub-ZIP**: ein lokal heruntergeladenes ZIP (z. B. über GitHub "Code → Download ZIP" für einen Branch/Tag/Commit, oder ein Release-Asset) wird auf den Proxmox-Host hochgeladen, in den Container übertragen und dort eingespielt — praktisch ohne Git-Zugriff aus dem Container heraus, oder um gezielt einen bestimmten heruntergeladenen Stand einzuspielen.
+
+```bash
+# Update per Git auf den neuesten main-Commit
+sudo ./scripts/nisorga-lxc-update.sh --ctid 135
+
+# Update aus einem lokal heruntergeladenen GitHub-ZIP
+sudo ./scripts/nisorga-lxc-update.sh --ctid 135 --zip /root/nisorga-main.zip
+```
+
+Wichtige Optionen: `--ctid` (Pflicht), `--branch`, `--zip`, `--dir` (Installationsverzeichnis im Container, Standard `/opt/nisorga`), `--dry-run`.
+
+### 4. Backup & Restore
+
+`scripts/nisorga-lxc-backup.sh` sichert Postgres-Datenbank und `backend/uploads/` (Anhänge) eines Containers als ein `.tar.gz` — erzeugt via `scripts/nisorga-backup.sh` im Container, danach per `pct pull` auf den Proxmox-Host geholt (damit das Backup auch bei Verlust des Containers erhalten bleibt; das Zielverzeichnis auf dem Host sollte selbst wieder in ein reguläres Proxmox-Backup/Replikation einbezogen werden).
+
+```bash
+# Backup erstellen (landet standardmäßig unter /var/lib/vz/nisorga-backups/<CTID>/ auf dem Host)
+sudo ./scripts/nisorga-lxc-backup.sh --ctid 135
+
+# Backup einspielen (DESTRUKTIV: ersetzt DB und Anhänge im Container)
+sudo ./scripts/nisorga-lxc-backup.sh --ctid 135 --restore /var/lib/vz/nisorga-backups/135/nisorga-backup-20260901-020000.tar.gz
+```
+
+Wichtige Optionen: `--ctid` (Pflicht), `--dest` (Zielverzeichnis auf dem Host), `--keep` (Aufbewahrungsanzahl im Container, Standard 7), `--restore`, `--dry-run`.
+
+### 5. Automatische Zeitpläne (Update/Backup)
+
+`scripts/nisorga-lxc-schedule.sh` richtet im Container einen systemd-Timer ein, der Update, Backup oder Healthcheck (siehe [Abschnitt 7](#7-monitoring--health-check)) regelmäßig automatisch anstößt — ohne Cron-Paket, nur mit Bordmitteln von Debian.
+
+```bash
+# Backup täglich um 02:00, 14 Stück aufbewahren
+sudo ./scripts/nisorga-lxc-schedule.sh --ctid 135 --task backup -- --keep 14
+
+# Update wöchentlich sonntags um 03:00 auf main
+sudo ./scripts/nisorga-lxc-schedule.sh --ctid 135 --task update --schedule "Sun 03:00" -- --branch main
+
+# Zeitplan wieder entfernen
+sudo ./scripts/nisorga-lxc-schedule.sh --ctid 135 --task backup --disable
+```
+
+Wichtige Optionen: `--ctid` (Pflicht), `--task update|backup|healthcheck` (Pflicht), `--schedule` (systemd-`OnCalendar`-Ausdruck, siehe `man systemd.time`; Standard: `03:00` für Updates, `02:00` für Backups, `*:0/5` (alle 5 Minuten) für Healthchecks), `--disable`. Alles nach `--` wird 1:1 an das geplante Skript durchgereicht (z. B. `--branch`, `--keep`, `--alert-email`).
+
+**Hinweis:** Das automatische Update pullt aus Git und baut/startet per Docker Compose neu — bei laufendem Betrieb kurzzeitig nicht erreichbar, keine Vorab-Prüfung auf Breaking Changes. Für produktive Instanzen ggf. lieber manuell anstoßen (`nisorga-lxc-update.sh`) oder vorher testen.
+
+### 6. HTTPS ohne eigenen Reverse Proxy (Caddy)
+
+Falls kein Nginx Proxy Manager (siehe [docs/deployment.md](docs/deployment.md)) vorhanden ist, richtet `scripts/nisorga-lxc-tls-setup.sh` stattdessen [Caddy](https://caddyserver.com/) als Reverse Proxy mit automatischem Let's-Encrypt-Zertifikat ein — als zusätzlicher Docker-Compose-Service (`docker-compose.tls.yml`), der intern an den `frontend`-Service weiterleitet (dessen eigener nginx kümmert sich schon um das API-Proxying zum Backend).
+
+Voraussetzungen (nicht Teil des Skripts): eine Domain, deren DNS auf die öffentliche IP dieses Containers zeigt, sowie Port 80 (ACME-HTTP-01-Challenge) und 443 von außen erreichbar (Portweiterleitung am Router auf den Proxmox-Host bzw. Container).
+
+```bash
+sudo ./scripts/nisorga-lxc-tls-setup.sh --ctid 135 --domain nisorga.deine-domain.tld --email du@deine-domain.tld
+
+# Wieder entfernen
+sudo ./scripts/nisorga-lxc-tls-setup.sh --ctid 135 --disable
+```
+
+Wichtige Optionen: `--ctid` (Pflicht), `--domain` (Pflicht außer bei `--disable`), `--email` (für Let's-Encrypt-Benachrichtigungen), `--dir`, `--disable`, `--dry-run`. Zertifikatsstatus prüfen: `docker compose -f docker-compose.yml -f docker-compose.tls.yml logs -f caddy` im Container.
+
+### 7. Monitoring / Health-Check
+
+Die Docker-Images von `postgres`, `backend` und `frontend` bringen bereits einen nativen Docker-`HEALTHCHECK` mit (Backend/Frontend pollen `GET /health` bzw. die nginx-Startseite alle 30s). `scripts/nisorga-healthcheck.sh` liest diesen Status über `docker inspect`, versucht bei einem ungesunden Service standardmäßig einen `docker compose restart`, und schickt bei anhaltendem Problem optional eine Alarmierung — per Webhook (z. B. Slack/Discord/ntfy.sh, JSON `{"text": "..."}`) und/oder E-Mail über die in `backend/.env` gesetzten `SMTP_*`-Variablen (die Settings-UI-Mailkonfiguration liegt nur in der DB und ist von diesem reinen Shell-Skript aus nicht erreichbar — für Alarm-Mails also `SMTP_*` zusätzlich in `.env` setzen, auch wenn der eigentliche Mailversand der App über die UI läuft).
+
+Am sinnvollsten als Zeitplan (siehe Abschnitt 5) eingerichtet:
+
+```bash
+sudo ./scripts/nisorga-lxc-schedule.sh --ctid 135 --task healthcheck -- --alert-email du@deine-domain.tld --webhook-url https://hooks.slack.com/services/...
+```
+
+Wichtige Optionen von `nisorga-healthcheck.sh`: `--dir`, `--no-restart` (keinen automatischen Neustart versuchen), `--alert-email`, `--webhook-url`, `--dry-run`. Exit-Code `0` = alles gesund, `1` = mindestens ein Service weiterhin ungesund — auch direkt für externes Monitoring per SSH-Aufruf nutzbar, unabhängig von Alarmierungs-Flags.

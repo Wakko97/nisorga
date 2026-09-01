@@ -39,6 +39,38 @@ enum ItemSource {
 model AppState {
   id          Int     @id @default(1)
   initialized Boolean @default(false)
+
+  // Global mail configuration (Owner-managed via Settings, GET/PUT
+  // /settings/mail). Passwords are stored AES-256-GCM encrypted (see
+  // lib/crypto.ts), never in plaintext. Every field is optional and falls
+  // back to the matching SMTP_*/IMAP_* env var (see lib/mailConfig.ts) so
+  // deployments that only set env vars keep working unchanged.
+  smtpHost        String?
+  smtpPort        Int?
+  smtpSecure      Boolean @default(false)
+  smtpUser        String?
+  smtpPasswordEnc String?
+  smtpFromEmail   String?
+
+  imapHost           String?
+  imapPort           Int?
+  imapSecure         Boolean @default(true)
+  imapUser           String?
+  imapPasswordEnc    String?
+  imapMailbox        String?
+  emailInboundDomain String?
+
+  // Google OAuth (Owner-managed via Settings, GET/PUT /settings/app).
+  // Falls back to GOOGLE_CLIENT_ID/SECRET/REDIRECT_URI env vars field-by-
+  // field (see lib/google.ts). Secret is AES-256-GCM encrypted like the
+  // mail passwords above.
+  googleClientId        String?
+  googleClientSecretEnc String?
+  googleRedirectUri     String?
+
+  // Delegation reminder threshold in days (Owner-managed via Settings,
+  // GET/PUT /settings/app). Falls back to WAITING_REMINDER_DAYS env var.
+  waitingReminderDays Int?
 }
 
 model User {
@@ -53,6 +85,17 @@ model User {
   emailVerifyExpiresAt  DateTime?
   createdAt             DateTime  @default(now())
 
+  // TOTP-based 2FA (RFC 6238). Secret is AES-256-GCM encrypted at rest
+  // (lib/crypto.ts). Written by POST /auth/2fa/setup as soon as a QR code
+  // is generated, but twoFactorEnabled only flips to true once the user
+  // proves possession of it via POST /auth/2fa/enable - until then it's
+  // just an unconfirmed pending secret with no effect on login.
+  // twoFactorBackupCodeHashes are single-use, bcrypt-hashed, consumed (and
+  // removed from the array) one at a time by lib/twoFactor.ts.
+  twoFactorSecretEnc        String?
+  twoFactorEnabled          Boolean  @default(false)
+  twoFactorBackupCodeHashes String[] @default([])
+
   createdItems    Item[]              @relation("CreatedItems")
   assignedItems   Item[]              @relation("AssignedItems")
   comments        Comment[]
@@ -60,6 +103,21 @@ model User {
   apiKeys         ApiKey[]
   webhooks        WebhookSubscription[]
   refreshTokens   RefreshToken[]
+  pushSubscriptions PushSubscription[]
+}
+
+// A single browser/device's Web Push subscription (PushSubscription.toJSON()
+// from the browser's Push API). A user can have several (one per
+// device/browser they enabled notifications on). endpoint is unique per
+// browser subscription, so upserting on it is idempotent for re-enabling.
+model PushSubscription {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
 }
 
 // Refresh tokens are stored hashed (never plaintext) and rotated on every

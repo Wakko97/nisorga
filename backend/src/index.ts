@@ -9,6 +9,7 @@ import { app } from "./app";
 import { prisma } from "./lib/prisma";
 import { runReminderCheck } from "./jobs/reminders";
 import { runWeeklyDigest } from "./jobs/weeklyDigest";
+import { runImapPoll } from "./jobs/imapPoll";
 
 const PORT = process.env.PORT || 4000;
 
@@ -33,5 +34,13 @@ if (process.env.NODE_ENV !== "test") {
   // Fridays at 08:00 — weekly review digest.
   cron.schedule("0 8 * * 5", () => {
     runWeeklyDigest().catch((err) => console.error("[cron] weekly digest failed:", err));
+  });
+
+  // Every 2 minutes — poll IMAP for inbound email capture (replaces the old
+  // SendGrid Inbound Parse webhook). No-ops on its own when IMAP_HOST isn't
+  // configured, so this doesn't need its own env guard here.
+  const imapPollCron = process.env.IMAP_POLL_CRON || "*/2 * * * *";
+  cron.schedule(imapPollCron, () => {
+    runImapPoll().catch((err) => console.error("[cron] IMAP poll failed:", err));
   });
 }

@@ -56,4 +56,52 @@ describe("Login", () => {
 
     await waitFor(() => expect(screen.getByText("Invalid credentials")).toBeInTheDocument());
   });
+
+  it("shows the 2FA code step when login reports twoFactorRequired, then completes it", async () => {
+    vi.mocked(api.post).mockResolvedValueOnce({ twoFactorRequired: true, tempToken: "temp-token-123" });
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.type(screen.getByLabelText("E-Mail"), "a@b.com");
+    await user.type(screen.getByLabelText("Passwort"), "secret123");
+    await user.click(screen.getByRole("button", { name: "Anmelden" }));
+
+    await waitFor(() =>
+      expect(screen.getByLabelText("Code aus der Authenticator-App")).toBeInTheDocument()
+    );
+
+    vi.mocked(api.post).mockResolvedValueOnce({ id: "1", email: "a@b.com", name: "A", role: "OWNER" });
+    await user.type(screen.getByLabelText("Code aus der Authenticator-App"), "123456");
+    await user.click(screen.getByRole("button", { name: "Bestätigen" }));
+
+    await waitFor(() =>
+      expect(api.post).toHaveBeenCalledWith("/auth/2fa/verify-login", {
+        tempToken: "temp-token-123",
+        token: "123456",
+      })
+    );
+  });
+
+  it("switches to backup-code entry and submits backupCode instead of token", async () => {
+    vi.mocked(api.post).mockResolvedValueOnce({ twoFactorRequired: true, tempToken: "temp-token-123" });
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.type(screen.getByLabelText("E-Mail"), "a@b.com");
+    await user.type(screen.getByLabelText("Passwort"), "secret123");
+    await user.click(screen.getByRole("button", { name: "Anmelden" }));
+    await waitFor(() => expect(screen.getByText("Stattdessen Backup-Code verwenden")).toBeInTheDocument());
+
+    await user.click(screen.getByText("Stattdessen Backup-Code verwenden"));
+    vi.mocked(api.post).mockResolvedValueOnce({ id: "1", email: "a@b.com", name: "A", role: "OWNER" });
+    await user.type(screen.getByLabelText("Backup-Code"), "abc123");
+    await user.click(screen.getByRole("button", { name: "Bestätigen" }));
+
+    await waitFor(() =>
+      expect(api.post).toHaveBeenCalledWith("/auth/2fa/verify-login", {
+        tempToken: "temp-token-123",
+        backupCode: "abc123",
+      })
+    );
+  });
 });

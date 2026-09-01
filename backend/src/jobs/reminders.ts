@@ -1,18 +1,22 @@
 import { prisma, publicUserSelect } from "../lib/prisma";
-import { sendEmail } from "../lib/sendgrid";
+import { sendEmail } from "../lib/mailer";
+import { sendPushToUser } from "../lib/push";
+import { getWaitingReminderDays } from "../lib/appConfig";
 
-const WAITING_REMINDER_DAYS = Number(process.env.WAITING_REMINDER_DAYS || 3);
+const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173";
 
 /**
  * Finds all items stuck in WAITING (delegated, awaiting a reply) for longer
- * than WAITING_REMINDER_DAYS and sends a reminder email to whoever is
- * involved (assignee and/or creator, if set and distinct).
+ * than the configured reminder threshold (Settings, falling back to
+ * WAITING_REMINDER_DAYS) and sends a reminder email to whoever is involved
+ * (assignee and/or creator, if set and distinct).
  *
  * Exported separately so it can be triggered manually / from tests without
  * going through node-cron.
  */
 export async function runReminderCheck() {
-  const cutoff = new Date(Date.now() - WAITING_REMINDER_DAYS * 24 * 60 * 60 * 1000);
+  const reminderDays = await getWaitingReminderDays();
+  const cutoff = new Date(Date.now() - reminderDays * 24 * 60 * 60 * 1000);
 
   const items = await prisma.item.findMany({
     where: { status: "WAITING", waitingSince: { lt: cutoff } },
@@ -22,7 +26,7 @@ export async function runReminderCheck() {
   for (const item of items) {
     const days = item.waitingSince
       ? Math.floor((Date.now() - item.waitingSince.getTime()) / (24 * 60 * 60 * 1000))
-      : WAITING_REMINDER_DAYS;
+      : reminderDays;
 
     const recipients = new Map<string, string>();
     if (item.assignedTo) recipients.set(item.assignedTo.id, item.assignedTo.email);
@@ -33,9 +37,11 @@ export async function runReminderCheck() {
       <p>Der Punkt <strong>${item.title}</strong> wartet seit ${days} Tagen auf eine Rückmeldung.</p>
       <p>${item.description ?? ""}</p>
     `;
+    const pushBody = `wartet seit ${days} Tagen auf eine Rückmeldung`;
 
-    for (const email of recipients.values()) {
+    for (const [userId, email] of recipients) {
       await sendEmail(email, subject, html);
+      await sendPushToUser(userId, { title: item.title, body: pushBody, url: `${FRONTEND_URL}/items/${item.id}` });
     }
   }
 

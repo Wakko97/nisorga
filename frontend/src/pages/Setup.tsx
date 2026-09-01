@@ -142,9 +142,9 @@ export default function Setup() {
             </p>
             <ul className="divide-y mb-6">
               <CheckRow
-                ok={!!status?.env.sendgridConfigured}
-                label="E-Mail-Versand (SendGrid)"
-                hint="nicht konfiguriert — SENDGRID_API_KEY etc. in backend/.env setzen, siehe README."
+                ok={!!status?.env.smtpConfigured}
+                label="E-Mail-Versand (SMTP)"
+                hint="nicht konfiguriert — SMTP_HOST etc. in backend/.env setzen, siehe README."
               />
               <CheckRow
                 ok={!!status?.env.googleConfigured}
@@ -154,7 +154,7 @@ export default function Setup() {
               <CheckRow
                 ok={!!status?.env.emailInboundConfigured}
                 label="E-Mail-Eingang (Items per Mail anlegen)"
-                hint="nicht konfiguriert — Inbound-Mail-Webhook in backend/.env setzen, siehe README."
+                hint="nicht konfiguriert — IMAP_HOST/EMAIL_INBOUND_DOMAIN in backend/.env setzen, siehe README."
               />
             </ul>
             <button

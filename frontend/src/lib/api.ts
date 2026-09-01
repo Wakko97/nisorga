@@ -62,6 +62,8 @@ export const api = {
   get: <T,>(path: string) => apiFetch<T>(path, { method: "GET" }),
   post: <T,>(path: string, body?: unknown) =>
     apiFetch<T>(path, { method: "POST", body: body !== undefined ? JSON.stringify(body) : undefined }),
+  put: <T,>(path: string, body?: unknown) =>
+    apiFetch<T>(path, { method: "PUT", body: body !== undefined ? JSON.stringify(body) : undefined }),
   patch: <T,>(path: string, body?: unknown) =>
     apiFetch<T>(path, { method: "PATCH", body: body !== undefined ? JSON.stringify(body) : undefined }),
   delete: <T,>(path: string) => apiFetch<T>(path, { method: "DELETE" }),
@@ -124,6 +126,39 @@ export async function apiUpload<T = unknown>(path: string, file: File | Blob, fi
   }
 
   return res.json();
+}
+
+/**
+ * Fetches an authenticated, cookie-protected file (e.g. GET /items/export)
+ * and saves it via a synthetic <a download> click - a plain navigation to
+ * the URL wouldn't carry the app's access-token-refresh handling, and a
+ * cross-origin API means the browser can't just be pointed at the URL
+ * directly for an in-place download anyway. Reads the filename from the
+ * response's Content-Disposition header, falling back to fallbackFilename.
+ */
+export async function downloadFile(path: string, fallbackFilename: string, _retried = false): Promise<void> {
+  const res = await fetch(`${API_URL}${path}`, { credentials: "include" });
+
+  if (res.status === 401 && !_retried) {
+    const refreshed = await refreshAccessToken();
+    if (refreshed) return downloadFile(path, fallbackFilename, true);
+  }
+
+  if (!res.ok) throw new ApiError(res.status, res.statusText);
+
+  const disposition = res.headers.get("Content-Disposition") ?? "";
+  const filenameMatch = disposition.match(/filename="([^"]+)"/);
+  const filename = filenameMatch?.[1] ?? fallbackFilename;
+
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 }
 
 /**

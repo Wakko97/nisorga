@@ -15,7 +15,7 @@ describe("setup wizard", () => {
     const res = await request(app).get("/setup/status");
     expect(res.status).toBe(200);
     expect(res.body.initialized).toBe(false);
-    expect(typeof res.body.env.sendgridConfigured).toBe("boolean");
+    expect(typeof res.body.env.smtpConfigured).toBe("boolean");
     expect(typeof res.body.env.googleConfigured).toBe("boolean");
     expect(typeof res.body.env.emailInboundConfigured).toBe("boolean");
     expect(JSON.stringify(res.body)).not.toContain(process.env.JWT_SECRET);

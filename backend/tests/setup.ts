@@ -4,7 +4,6 @@ import { prisma } from "../src/lib/prisma";
 
 process.env.NODE_ENV = "test";
 process.env.JWT_SECRET = process.env.JWT_SECRET || "test-secret";
-process.env.EMAIL_INBOUND_SECRET = process.env.EMAIL_INBOUND_SECRET || "test-inbound-secret";
 process.env.GOOGLE_TOKEN_ENCRYPTION_KEY =
   process.env.GOOGLE_TOKEN_ENCRYPTION_KEY || "0".repeat(64);
 
@@ -20,10 +19,31 @@ beforeEach(async () => {
 
   // Most tests exercise the app as if the setup wizard already ran (self
   // registration open). Tests covering the wizard itself explicitly flip
-  // this back to false.
+  // this back to false. Mail settings are reset too, so a test that
+  // configures them (Settings /mail) can't leak into an unrelated test
+  // that expects env-var fallback behavior.
   await prisma.appState.upsert({
     where: { id: 1 },
-    update: { initialized: true },
+    update: {
+      initialized: true,
+      smtpHost: null,
+      smtpPort: null,
+      smtpSecure: false,
+      smtpUser: null,
+      smtpPasswordEnc: null,
+      smtpFromEmail: null,
+      imapHost: null,
+      imapPort: null,
+      imapSecure: true,
+      imapUser: null,
+      imapPasswordEnc: null,
+      imapMailbox: null,
+      emailInboundDomain: null,
+      googleClientId: null,
+      googleClientSecretEnc: null,
+      googleRedirectUri: null,
+      waitingReminderDays: null,
+    },
     create: { id: 1, initialized: true },
   });
 });

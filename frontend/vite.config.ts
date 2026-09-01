@@ -8,6 +8,13 @@ export default defineConfig({
     VitePWA({
       registerType: "autoUpdate",
       includeAssets: ["favicon.png", "apple-touch-icon.png", "icon-source.svg"],
+      // A custom service worker (src/sw.ts) is required to handle 'push'/
+      // 'notificationclick' for Web Push notifications - the default
+      // generateSW strategy only auto-generates precaching, with no way to
+      // add custom event listeners.
+      strategies: "injectManifest",
+      srcDir: "src",
+      filename: "sw.ts",
       manifest: {
         name: "Nisorga",
         short_name: "Nisorga",
@@ -23,10 +30,10 @@ export default defineConfig({
           { src: "maskable-icon-512x512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
         ],
       },
-      workbox: {
-        // App-shell precaching only; all real data comes from the API and
-        // must not be served stale/offline.
-        navigateFallbackDenylist: [/^\/api\//],
+      injectManifest: {
+        // Only precache the app shell (JS/CSS/HTML/icons) - real data comes
+        // from the API and must not be served stale/offline.
+        globPatterns: ["**/*.{js,css,html,svg,png,ico,webmanifest}"],
       },
     }),
   ],

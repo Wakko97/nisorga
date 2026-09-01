@@ -34,7 +34,7 @@ describe("Setup", () => {
   beforeEach(() => {
     vi.mocked(api.get).mockResolvedValue({
       initialized: false,
-      env: { sendgridConfigured: false, googleConfigured: false, emailInboundConfigured: false },
+      env: { smtpConfigured: false, googleConfigured: false, emailInboundConfigured: false },
     });
   });
 
@@ -86,7 +86,7 @@ describe("Setup", () => {
   it("shows the server-config checklist based on GET /setup/status", async () => {
     vi.mocked(api.get).mockResolvedValue({
       initialized: false,
-      env: { sendgridConfigured: true, googleConfigured: false, emailInboundConfigured: false },
+      env: { smtpConfigured: true, googleConfigured: false, emailInboundConfigured: false },
     });
     vi.mocked(api.post).mockResolvedValueOnce({
       id: "1",
@@ -104,7 +104,7 @@ describe("Setup", () => {
     await user.type(screen.getByLabelText("Passwort"), "supersecret");
     await user.click(screen.getByRole("button", { name: "Owner-Account anlegen" }));
 
-    await waitFor(() => expect(screen.getByText("E-Mail-Versand (SendGrid)")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("E-Mail-Versand (SMTP)")).toBeInTheDocument());
     expect(screen.getByText("Google Kalender")).toBeInTheDocument();
     expect(screen.getByText(/E-Mail-Eingang/)).toBeInTheDocument();
   });

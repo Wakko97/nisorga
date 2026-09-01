@@ -7,6 +7,7 @@ import Matrix from "./pages/Matrix";
 import Tasks from "./pages/Tasks";
 import ItemDetail from "./pages/ItemDetail";
 import Review from "./pages/Review";
+import Search from "./pages/Search";
 import Settings from "./pages/Settings";
 import VerifyEmail from "./pages/VerifyEmail";
 import Layout from "./components/Layout";
@@ -49,6 +50,7 @@ export default function App() {
             <Route path="/tasks" element={<Tasks />} />
             <Route path="/review" element={<Review />} />
             <Route path="/items/:id" element={<ItemDetail />} />
+            <Route path="/search" element={<Search />} />
             <Route path="/settings" element={<Settings />} />
           </Route>
         </Route>
